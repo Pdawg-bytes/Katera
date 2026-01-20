@@ -26,8 +26,4 @@
     <Compile Include="..\Kata\Enums\Endianness.cs" Link="Shared\Endianness.cs" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Folder Include="Emission\" />
-  </ItemGroup>
-
 </Project>

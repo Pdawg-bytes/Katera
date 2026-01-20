@@ -13,6 +13,7 @@ internal enum OwnedKind
 
 internal enum NumericKind
 {
+    Byte,
     UShort,
     UInt,
     ULong

@@ -15,8 +15,8 @@ internal static class LayoutLowerer
         {
             StorageMode.Expanded => OwnedKind.Expanded,
             StorageMode.Register => OwnedKind.Register,
-            StorageMode.Blob => OwnedKind.Blob,
-            StorageMode.Auto => ResolveAuto(size),
+            StorageMode.Blob     => OwnedKind.Blob,
+            StorageMode.Auto     => ResolveAuto(size),
             _ => throw new Exception("Unreachable")
         };
 
@@ -44,7 +44,8 @@ internal static class LayoutLowerer
             : OwnedKind.Blob;
 
     private static NumericKind SelectNumeric(int sizeBytes)
-        => sizeBytes <= 2 ? NumericKind.UShort
+        => sizeBytes == 1 ? NumericKind.Byte
+         : sizeBytes <= 2 ? NumericKind.UShort
          : sizeBytes <= 4 ? NumericKind.UInt
          : NumericKind.ULong;
 }

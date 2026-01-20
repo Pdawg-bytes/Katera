@@ -171,7 +171,7 @@ internal static class AttributeParser
             }
         }
 
-        model.ComputedSizeBytes = (cursor + 7) / 8;
+        model.ComputedSizeBytes = model.SizeBytes == 0 ? (cursor + 7) / 8 : model.SizeBytes;
     }
 
 

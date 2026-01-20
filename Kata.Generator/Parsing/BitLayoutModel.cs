@@ -18,6 +18,5 @@ internal sealed class BitLayoutModel(
 
     internal List<LayoutItem> Items { get; } = [];
 
-    // Set during validation
     public int ComputedSizeBytes { get; internal set; }
 }
