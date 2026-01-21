@@ -4,6 +4,8 @@ using Kata.Generator.Validation;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
+using static Kata.Generator.Utilities.TypeHelpers;
+
 namespace Kata.Generator.Parsing;
 
 internal static class AttributeParser
@@ -108,17 +110,13 @@ internal static class AttributeParser
             return;
         }
 
-        int length  = (int)attr.ConstructorArguments[0].Value!;
-        int offset  = -1;
-        bool signed = false;
+        int length = (int)attr.ConstructorArguments[0].Value!;
+        int offset = -1;
 
         foreach (var arg in attr.NamedArguments)
         {
-            switch (arg.Key)
-            {
-                case "Offset":   offset = (int)arg.Value.Value!;  break;
-                case "IsSigned": signed = (bool)arg.Value.Value!; break;
-            }
+            if (arg.Key != "Offset") continue;
+            offset = (int)arg.Value.Value!;
         }
 
         if (length <= 0)
@@ -126,6 +124,7 @@ internal static class AttributeParser
             ctx.ReportDiagnostic(Diagnostic.Create(
                 Diagnostics.Bit007_InvalidLength,
                 location,
+                "greater than zero",
                 length));
 
             return;
@@ -136,7 +135,7 @@ internal static class AttributeParser
             member.Type,
             length,
             offset,
-            signed,
+            IsSignedType(member.Type),
             member
         ));
     }

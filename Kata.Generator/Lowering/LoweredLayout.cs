@@ -13,10 +13,10 @@ internal enum OwnedKind
 
 internal enum NumericKind
 {
-    Byte,
-    UShort,
-    UInt,
-    ULong
+    Byte   = 8,
+    UShort = 16,
+    UInt   = 32,
+    ULong  = 64
 }
 
 internal sealed class LoweredLayout(INamedTypeSymbol symbol, OwnedKind ownedKind, int sizeBytes, Endianness endianness, ImmutableList<BitFieldModel> fields, NumericKind? numeric)

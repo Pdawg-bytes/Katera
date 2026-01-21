@@ -68,7 +68,7 @@ internal static class Diagnostics
     (
         id: "BIT007",
         title: "Invalid BitField length",
-        messageFormat: "BitField length must be greater than zero (got {0})",
+        messageFormat: "BitField length must be {0} (got {1})",
         category: "Kata.BitLayout",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true

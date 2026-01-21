@@ -3,14 +3,19 @@ using Kata.Generator.Parsing;
 using Microsoft.CodeAnalysis;
 using System.Collections.Generic;
 
+using static Kata.Generator.Utilities.TypeHelpers;
+
 namespace Kata.Generator.Validation;
 
 internal static class LayoutValidator
 {
     internal static void Validate(BitLayoutModel model, SourceProductionContext ctx)
     {
+        int logicalSizeBits = model.ComputedSizeBytes * 8;
+        bool allowOverlap   = model.AllowOverlap && model.Mode != StorageMode.Expanded;
+
+        var spans  = new List<(BitFieldModel field, int start, int end)>();
         int cursor = 0;
-        var spans = new List<(BitFieldModel field, int start, int end)>();
 
         foreach (var item in model.Items)
         {
@@ -19,34 +24,44 @@ internal static class LayoutValidator
                 case BitFieldModel f:
                     {
                         int start = f.Offset >= 0 ? f.Offset : cursor;
-
-                        if (start > cursor)
-                        {
-                            ctx.ReportDiagnostic(Diagnostic.Create(
-                                Diagnostics.Bit006_Gap,
-                                model.Symbol.Locations.FirstOrDefault(),
-                                cursor,
-                                start));
-                        }
-
                         int end = start + f.Length;
+
                         spans.Add((f, start, end));
-                        cursor = end;
+
+                        if (!allowOverlap)
+                            cursor = end;
+
                         break;
                     }
 
                 case PadModel pad:
                     {
-                        cursor += pad.Bits;
+                        if (!allowOverlap)
+                            cursor += pad.Bits;
                         break;
                     }
             }
         }
 
-        int logicalSizeBits = model.ComputedSizeBytes * 8;
+
+        // BIT006
+        int expectedEnd = 0;
+        foreach (var (field, start, _) in spans)
+        {
+            if (start > expectedEnd)
+            {
+                ctx.ReportDiagnostic(Diagnostic.Create(
+                    Diagnostics.Bit006_Gap,
+                    model.Symbol.Locations.FirstOrDefault(),
+                    expectedEnd,
+                    start));
+            }
+
+            expectedEnd = start + field.Length;
+        }
 
         // BIT001
-        if (model.SizeBytes > 0)
+        if (!allowOverlap)
         {
             foreach (var (field, _, end) in spans)
             {
@@ -63,17 +78,9 @@ internal static class LayoutValidator
         }
 
         // BIT003
-        if (model.Mode == StorageMode.Register &&
-            model.ComputedSizeBytes is not (1 or 2 or 4 or 8))
-        {
-            ctx.ReportDiagnostic(Diagnostic.Create(
-                Diagnostics.Bit003_InvalidSize,
-                model.Symbol.Locations.FirstOrDefault(),
-                model.ComputedSizeBytes));
-        }
-
-        if (model.Mode == StorageMode.Expanded &&
-            model.ComputedSizeBytes > 8)
+        if ((model.Mode == StorageMode.Expanded  || 
+             model.Mode == StorageMode.Register) &&
+             model.ComputedSizeBytes > 8)
         {
             ctx.ReportDiagnostic(Diagnostic.Create(
                 Diagnostics.Bit003_InvalidSize,
@@ -96,20 +103,16 @@ internal static class LayoutValidator
             }
         }
 
-        // BIT005
-        var owner = new BitFieldModel?[logicalSizeBits];
 
-        foreach (var (field, start, end) in spans)
+        if (!allowOverlap)
         {
-            for (int bit = start; bit < end && bit < logicalSizeBits; bit++)
-            {
-                if (owner[bit] is { } other)
-                {
-                    bool overlapAllowed =
-                        model.AllowOverlap &&
-                        model.Mode != StorageMode.Expanded;
+            var owner = new BitFieldModel?[logicalSizeBits];
 
-                    if (!overlapAllowed)
+            foreach (var (field, start, end) in spans)
+            {
+                for (int bit = start; bit < end && bit < logicalSizeBits; bit++)
+                {
+                    if (owner[bit] is { } other)
                     {
                         ctx.ReportDiagnostic(Diagnostic.Create(
                             Diagnostics.Bit005_Overlap,
@@ -118,30 +121,10 @@ internal static class LayoutValidator
                             other.Name,
                             bit));
                     }
-                }
 
-                owner[bit] = field;
+                    owner[bit] = field;
+                }
             }
         }
-    }
-
-
-    private static int GetTypeBitWidth(ITypeSymbol type)
-    {
-        return type.SpecialType switch
-        {
-            SpecialType.System_Boolean => 1,
-            SpecialType.System_Byte    => 8,
-            SpecialType.System_SByte   => 8,
-            SpecialType.System_Int16   => 16,
-            SpecialType.System_UInt16  => 16,
-            SpecialType.System_Int32   => 32,
-            SpecialType.System_UInt32  => 32,
-            SpecialType.System_Int64   => 64,
-            SpecialType.System_UInt64  => 64,
-            _ => type.TypeKind == TypeKind.Enum
-                ? GetTypeBitWidth(((INamedTypeSymbol)type).EnumUnderlyingType!)
-                : 0
-        };
     }
 }

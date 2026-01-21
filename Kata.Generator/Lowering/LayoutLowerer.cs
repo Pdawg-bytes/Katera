@@ -39,7 +39,7 @@ internal static class LayoutLowerer
     }
 
     private static OwnedKind ResolveAuto(int sizeBytes)
-        => sizeBytes is 1 or 2 or 4 or 8
+        => sizeBytes <= 8
             ? OwnedKind.Register
             : OwnedKind.Blob;
 
