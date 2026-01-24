@@ -14,8 +14,8 @@ internal static class LayoutValidator
         int logicalSizeBits = model.ComputedSizeBytes * 8;
         bool allowOverlap   = model.AllowOverlap && model.Mode != StorageMode.Expanded;
 
-        var spans  = new List<(BitFieldModel field, int start, int end)>();
-        int cursor = 0;
+        var spans    = new List<(BitFieldModel? field, int start, int end)>();
+        int cursor   = 0;
 
         foreach (var item in model.Items)
         {
@@ -36,8 +36,14 @@ internal static class LayoutValidator
 
                 case PadModel pad:
                     {
+                        int start = cursor;
+                        int end = start + pad.Bits;
+
+                        spans.Add((null, start, end));
+
                         if (!allowOverlap)
-                            cursor += pad.Bits;
+                            cursor = end;
+
                         break;
                     }
             }
@@ -46,7 +52,7 @@ internal static class LayoutValidator
 
         // BIT006
         int expectedEnd = 0;
-        foreach (var (field, start, _) in spans)
+        foreach (var (field, start, end) in spans)
         {
             if (start > expectedEnd)
             {
@@ -57,7 +63,7 @@ internal static class LayoutValidator
                     start));
             }
 
-            expectedEnd = start + field.Length;
+            expectedEnd = end;
         }
 
         // BIT001
@@ -65,6 +71,7 @@ internal static class LayoutValidator
         {
             foreach (var (field, _, end) in spans)
             {
+                if (field is null) continue;
                 if (end > logicalSizeBits)
                 {
                     ctx.ReportDiagnostic(Diagnostic.Create(
@@ -91,7 +98,8 @@ internal static class LayoutValidator
         // BIT002
         foreach (var (field, _, _) in spans)
         {
-            int typeBits = GetTypeBitWidth(field.Type);
+            if (field is null) continue;
+            int typeBits = field.BackingWidth;
             if (field.Length > typeBits)
             {
                 ctx.ReportDiagnostic(Diagnostic.Create(
@@ -110,6 +118,7 @@ internal static class LayoutValidator
 
             foreach (var (field, start, end) in spans)
             {
+                if (field is null) continue;
                 for (int bit = start; bit < end && bit < logicalSizeBits; bit++)
                 {
                     if (owner[bit] is { } other)

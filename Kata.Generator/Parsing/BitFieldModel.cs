@@ -1,4 +1,5 @@
 ﻿using System.Linq;
+using Kata.Generator.Utilities;
 using Microsoft.CodeAnalysis;
 
 namespace Kata.Generator.Parsing;
@@ -15,6 +16,7 @@ internal sealed class BitFieldModel : LayoutItem
     internal string Name        { get; }
     internal ITypeSymbol Type   { get; }
     internal int Length         { get; }
+    internal int BackingWidth   { get; }
     internal int Offset         { get; set; }
     internal bool IsSigned      { get; }
     internal Location? Location { get; }
@@ -37,6 +39,8 @@ internal sealed class BitFieldModel : LayoutItem
         Offset   = offset;
         IsSigned = isSigned;
         Location = symbol.Locations.FirstOrDefault();
+
+        BackingWidth  = TypeHelpers.GetTypeBitWidth(type);
 
         Accessibility = symbol.DeclaredAccessibility;
         IsRequired    = symbol.IsRequired;
