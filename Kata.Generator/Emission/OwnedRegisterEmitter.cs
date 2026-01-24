@@ -136,20 +136,17 @@ internal static class OwnedRegisterEmitter
     private static void EmitFastPathGetter(SourceBuilder sb, BitFieldModel field, string backingType)
     {
         string typeName = field.Type.ToDisplayString();
-        int index = field.Offset / field.Length;
+        int index       = field.Offset / field.Length;
 
         sb.OpenBlock("get");
-        sb.Line($"ref {typeName} p = ref Unsafe.As<{backingType}, {typeName}>(ref _value);");
+        sb.Line($"Span<{backingType}> s = MemoryMarshal.CreateSpan(ref _value, 1);");
+        sb.Line($"ref {typeName} p = ref Unsafe.As<{backingType}, {typeName}>(ref MemoryMarshal.GetReference(s));");
         sb.Line($"return Unsafe.Add(ref p, {index});");
         sb.CloseBlock();
     }
 
 
-    private static void EmitBoolSetter(
-        SourceBuilder sb,
-        string backingType,
-        int shift,
-        AccessorKind kind)
+    private static void EmitBoolSetter(SourceBuilder sb, string backingType, int shift, AccessorKind kind)
     {
         string accessor = kind == AccessorKind.GetInit ? "init" : "set";
         sb.Line(
@@ -164,7 +161,8 @@ internal static class OwnedRegisterEmitter
         string accessor = field.AccessorKind == AccessorKind.GetInit ? "init" : "set";
 
         sb.OpenBlock(accessor);
-        sb.Line($"ref {typeName} p = ref Unsafe.As<{backingType}, {typeName}>(ref _value);");
+        sb.Line($"Span<{backingType}> s = MemoryMarshal.CreateSpan(ref _value, 1);");
+        sb.Line($"ref {typeName} p = ref Unsafe.As<{backingType}, {typeName}>(ref MemoryMarshal.GetReference(s));");
         sb.Line($"Unsafe.Add(ref p, {index}) = value;");
         sb.CloseBlock();
     }
