@@ -19,12 +19,12 @@ internal enum NumericKind
     ULong  = 64
 }
 
-internal sealed class LoweredLayout(INamedTypeSymbol symbol, OwnedKind ownedKind, int sizeBytes, Endianness endianness, ImmutableList<BitFieldModel> fields, NumericKind? numeric)
+internal sealed class LoweredLayout(INamedTypeSymbol symbol, OwnedKind ownedKind, int sizeBytes, BitOrder bitOrder, ImmutableList<BitFieldModel> fields, NumericKind? numeric)
 {
     internal readonly INamedTypeSymbol Symbol             = symbol;
     internal readonly OwnedKind OwnedKind                 = ownedKind;
     internal readonly int SizeBytes                       = sizeBytes;
-    internal readonly Endianness Endianness               = endianness;
+    internal readonly BitOrder BitOrder                   = bitOrder;
     internal readonly ImmutableList<BitFieldModel> Fields = fields;
     internal readonly NumericKind? Numeric                = numeric;
 }

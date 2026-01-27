@@ -8,13 +8,13 @@ internal sealed class BitLayoutModel(
     int sizeBytes,
     StorageMode mode,
     bool allowOverlap,
-    Endianness endianness)
+    BitOrder bitOrder)
 {
-    internal INamedTypeSymbol Symbol  { get; } = symbol;
-    internal int SizeBytes            { get; } = sizeBytes;
-    internal StorageMode Mode         { get; } = mode;
-    internal bool AllowOverlap        { get; } = allowOverlap;
-    internal Endianness Endianness    { get; } = endianness;
+    internal INamedTypeSymbol Symbol { get; } = symbol;
+    internal int SizeBytes           { get; } = sizeBytes;
+    internal StorageMode Mode        { get; } = mode;
+    internal bool AllowOverlap       { get; } = allowOverlap;
+    internal BitOrder BitOrder       { get; } = bitOrder;
 
     internal List<LayoutItem> Items { get; } = [];
 

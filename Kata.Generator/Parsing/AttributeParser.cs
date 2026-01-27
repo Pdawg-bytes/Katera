@@ -33,10 +33,10 @@ internal static class AttributeParser
             return new LayoutParseResult(null, diag);
         }
 
-        int size              = 0;
-        StorageMode mode      = StorageMode.Auto;
-        bool allowOverlap     = false;
-        Endianness endianness = Endianness.LittleEndian;
+        int size          = 0;
+        StorageMode mode  = StorageMode.Auto;
+        bool allowOverlap = false;
+        BitOrder bitOrder = BitOrder.LSBFirst;
 
         foreach (var attr in symbol.GetAttributes())
         {
@@ -50,12 +50,12 @@ internal static class AttributeParser
                     case "Size":         size = (int)arg.Value.Value!; break;
                     case "Mode":         mode = (StorageMode)arg.Value.Value!; break;
                     case "AllowOverlap": allowOverlap = (bool)arg.Value.Value!; break;
-                    case "Endianness":   endianness = (Endianness)arg.Value.Value!; break;
+                    case "BitOrder":     bitOrder = (BitOrder)arg.Value.Value!; break;
                 }
             }
         }
 
-        var model = new BitLayoutModel(symbol, size, mode, allowOverlap, endianness);
+        var model = new BitLayoutModel(symbol, size, mode, allowOverlap, bitOrder);
         return new LayoutParseResult(model, null);
     }
 
@@ -99,7 +99,7 @@ internal static class AttributeParser
 
         var location = member.Locations.FirstOrDefault();
 
-        if (!IsValidBitFieldTarget(member, model.Mode, out var reason))
+        if (!IsValidBitFieldTarget(member, out var reason))
         {
             ctx.ReportDiagnostic(Diagnostic.Create(
                 Diagnostics.Bit004_InvalidTarget,
@@ -174,7 +174,7 @@ internal static class AttributeParser
     }
 
 
-    private static bool IsValidBitFieldTarget(IPropertySymbol p, StorageMode mode, out string? reason)
+    private static bool IsValidBitFieldTarget(IPropertySymbol p, out string? reason)
     {
         if (!IsValidBitFieldType(p.Type))
         {
@@ -204,12 +204,6 @@ internal static class AttributeParser
             p.SetMethod?.DeclaredAccessibility == Accessibility.Private)
         {
             reason = "getters and setters cannot be private";
-            return false;
-        }
-
-        if (mode == StorageMode.Expanded && p.SetMethod is null)
-        {
-            reason = "property must have a getter and setter in expanded mode";
             return false;
         }
 

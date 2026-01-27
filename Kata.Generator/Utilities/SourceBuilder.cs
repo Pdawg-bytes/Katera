@@ -8,7 +8,7 @@ internal sealed class SourceBuilder
     private readonly StringBuilder _sb = new();
     private int _indent;
 
-    public void Line(string? text = null)
+    internal void Line(string? text = null)
     {
         if (text is null)
         {
@@ -20,7 +20,7 @@ internal sealed class SourceBuilder
         _sb.AppendLine(text);
     }
 
-    public void Write(string text, bool indent)
+    internal void Write(string text, bool indent)
     {
         if (indent)
             _sb.Append(' ', _indent * 4);
@@ -28,14 +28,25 @@ internal sealed class SourceBuilder
         _sb.Append(text);
     }
 
-    public void OpenBlock(string header)
+    internal void Append(SourceBuilder newSb)
+    {
+        if (newSb is null)
+        {
+            _sb.AppendLine();
+            return;
+        }
+
+        _sb.Append(newSb.ToString());
+    }
+
+    internal void OpenBlock(string header)
     {
         Line(header);
         Line("{");
         _indent++;
     }
 
-    public void CloseBlock(string? trailer = null)
+    internal void CloseBlock(string? trailer = null)
     {
         _indent--;
 

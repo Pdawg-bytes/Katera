@@ -23,7 +23,7 @@
 
   <ItemGroup>
     <Compile Include="..\Kata\Enums\StorageMode.cs" Link="Shared\StorageMode.cs" />
-    <Compile Include="..\Kata\Enums\Endianness.cs" Link="Shared\Endianness.cs" />
+    <Compile Include="..\Kata\Enums\BitOrder.cs" Link="Shared\Endianness.cs" />
   </ItemGroup>
 
 </Project>

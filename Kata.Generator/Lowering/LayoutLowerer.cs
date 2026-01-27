@@ -29,12 +29,12 @@ internal static class LayoutLowerer
 
         return new LoweredLayout
         (
-            symbol:     model.Symbol,
-            ownedKind:  ownedKind,
-            sizeBytes:  size,
-            endianness: model.Endianness,
-            numeric:    numeric,
-            fields:     model.Items.OfType<BitFieldModel>().ToImmutableList()
+            symbol:    model.Symbol,
+            ownedKind: ownedKind,
+            sizeBytes: size,
+            bitOrder:  model.BitOrder,
+            numeric:   numeric,
+            fields:    model.Items.OfType<BitFieldModel>().ToImmutableList()
         );
     }
 

@@ -1,8 +1,10 @@
-﻿using System;
-using Microsoft.CodeAnalysis;
+﻿using Kata.Generator.Lowering;
 using Kata.Generator.Parsing;
-using Kata.Generator.Lowering;
 using Kata.Generator.Utilities;
+using Microsoft.CodeAnalysis;
+using System;
+using System.Numerics;
+using static Kata.Generator.Emission.Common;
 
 namespace Kata.Generator.Emission;
 
@@ -34,7 +36,7 @@ internal static class OwnedRegisterEmitter
 
         sb.Line();
         sb.Line();
-        EmitCasts(plan, backingType, sb);
+        EmitConversions(plan, methodAccessibility, backingType, sb);
     }
 
 
@@ -42,17 +44,12 @@ internal static class OwnedRegisterEmitter
     {
         int totalBits = plan.SizeBytes * 8;
 
-        int shift = plan.Endianness == Endianness.LittleEndian
+        int shift = plan.BitOrder == BitOrder.LSBFirst
             ? field.Offset
             : totalBits - field.Offset - field.Length;
 
-        string maskLiteral = GetMaskLiteral(field.Length);
-        string accessibility = field.Accessibility switch
-        {
-            Accessibility.Public   => "public",
-            Accessibility.Internal => "internal",
-            _                      => "private"
-        };
+        string maskLiteral   = GetMaskLiteral(field.Length);
+        string accessibility = GetAccessibility(field.Accessibility);
 
         string typeName = field.Type.ToDisplayString();
 
@@ -70,12 +67,12 @@ internal static class OwnedRegisterEmitter
     private static Action<SourceBuilder> SelectGetter(LoweredLayout plan, BitFieldModel field, string backingType, int shift, string maskLiteral)
     {
         if (field.Type.SpecialType == SpecialType.System_Boolean)
-            return sb => EmitBoolGetter(sb, shift);
+            return sb => sb.Line($"get => ((_value >> {shift}) & 1) != 0;");
 
-        if (IsFastPathEligible(field, plan.Endianness))
+        if (IsFastPathEligible(field, plan.BitOrder))
             return sb => EmitFastPathGetter(sb, field, backingType);
 
-        bool isFullWidth = field.Offset == 0 && field.Length == plan.SizeBytes * 8;
+        bool isFullWidth = field.Offset == 0 && field.Length == (int)plan.Numeric! * 8;
 
         if (isFullWidth)
             return sb => sb.Line($"get => ({field.Type.ToDisplayString()})_value;");
@@ -87,7 +84,7 @@ internal static class OwnedRegisterEmitter
                 $"get => ({typeName})((({backingType})((_value >> {shift}) & (({backingType}){maskLiteral}))));");
         }
 
-        return sb => EmitSignedGetter(sb, field, backingType, shift, maskLiteral);
+        return sb => EmitSignedGetter(sb, field, (int)plan.Numeric!, backingType, shift, maskLiteral);
     }
 
     private static Action<SourceBuilder>? SelectSetter(LoweredLayout plan, BitFieldModel field, string backingType, int shift, string maskLiteral)
@@ -95,41 +92,35 @@ internal static class OwnedRegisterEmitter
         if (field.AccessorKind == AccessorKind.GetOnly)
             return null;
 
+        string accessor = field.AccessorKind == AccessorKind.GetSet ? "set" : "init";
+
         if (field.Type.SpecialType == SpecialType.System_Boolean)
-            return sb => EmitBoolSetter(sb, backingType, shift, field.AccessorKind);
+            return sb => EmitBoolSetter(sb, accessor, backingType, shift, field.AccessorKind);
 
-        if (IsFastPathEligible(field, plan.Endianness))
-            return sb => EmitFastPathSetter(sb, field, backingType);
+        if (IsFastPathEligible(field, plan.BitOrder))
+            return sb => EmitFastPathSetter(sb, field, accessor, backingType);
 
-        bool isFullWidth = field.Offset == 0 && field.Length == plan.SizeBytes * 8;
+        bool isFullWidth = field.Offset == 0 && field.Length == (int)plan.Numeric! * 8;
 
         if (isFullWidth)
-            return sb => sb.Line($"{Accessor(field)} => _value = ({backingType})value;");
+            return sb => sb.Line($"{accessor} => _value = ({backingType})value;");
 
         return sb => sb.Line(
-            $"{Accessor(field)} => _value = " +
+            $"{accessor} => _value = " +
             $"(_value & ~((({backingType}){maskLiteral}) << {shift})) | " +
             $"((((({backingType})value) & ({backingType}){maskLiteral}) << {shift}));");
     }
 
-    private static string Accessor(BitFieldModel field) => field.AccessorKind == AccessorKind.GetInit ? "init" : "set";
 
-
-    private static void EmitBoolGetter(SourceBuilder sb, int shift)
+    private static void EmitSignedGetter(SourceBuilder sb, BitFieldModel field, int backingWidth, string backingType, int shift, string maskLiteral)
     {
-        sb.Line($"get => ((_value >> {shift}) & 1) != 0;");
-    }
-
-    private static void EmitSignedGetter(SourceBuilder sb, BitFieldModel field, string backingType, int shift, string maskLiteral)
-    {
-        string typeName = field.Type.ToDisplayString();
+        string typeName           = field.Type.ToDisplayString();
         string signedIntermediate = GetSignedIntermediateType(backingType);
+        int shiftAmount           = backingWidth - field.Length;
 
         sb.OpenBlock("get");
         sb.Line($"{backingType} raw = (_value >> {shift}) & (({backingType}){maskLiteral});");
-        sb.Line($"{signedIntermediate} bits = ({signedIntermediate})raw;");
-        sb.Line($"{signedIntermediate} sign = ({signedIntermediate})(1 << {field.Length - 1});");
-        sb.Line($"return ({typeName})((bits ^ sign) - sign);");
+        sb.Line($"return ({typeName})(({signedIntermediate})(raw << {shiftAmount}) >> {shiftAmount});");
         sb.CloseBlock();
     }
 
@@ -146,19 +137,15 @@ internal static class OwnedRegisterEmitter
     }
 
 
-    private static void EmitBoolSetter(SourceBuilder sb, string backingType, int shift, AccessorKind kind)
-    {
-        string accessor = kind == AccessorKind.GetInit ? "init" : "set";
+    private static void EmitBoolSetter(SourceBuilder sb, string accessor, string backingType, int shift, AccessorKind kind) =>
         sb.Line(
             $"{accessor} => _value = (_value & ~(({backingType})1 << {shift})) | " +
             $"(value ? (({backingType})1 << {shift}) : 0);");
-    }
 
-    private static void EmitFastPathSetter(SourceBuilder sb, BitFieldModel field, string backingType)
+    private static void EmitFastPathSetter(SourceBuilder sb, BitFieldModel field, string accessor, string backingType)
     {
         string typeName = field.Type.ToDisplayString();
         int index       = field.Offset / field.Length;
-        string accessor = field.AccessorKind == AccessorKind.GetInit ? "init" : "set";
 
         sb.OpenBlock(accessor);
         sb.Line($"Span<{backingType}> s = MemoryMarshal.CreateSpan(ref _value, 1);");
@@ -168,31 +155,22 @@ internal static class OwnedRegisterEmitter
     }
 
 
-    private static string GetMaskLiteral(int bitWidth)
-    {
-        if (bitWidth == 0)
-            return "0";
-
-        if (bitWidth >= 64)
-            return "0xFFFFFFFFFFFFFFFF";
-
-        ulong mask = (1UL << bitWidth) - 1UL;
-        return "0x" + mask.ToString("X");
-    }
-
     private static string GetSignedIntermediateType(string backingType)
     {
         return backingType switch
         {
             "byte" or "sbyte" or "ushort" or "short" or "uint" or "int" => "int",
-            "ulong" or "long" => "long",
-            _ => "int"
+            "ulong" or "long"                                           => "long",
+            _                                                           => "int"
         };
     }
 
-    private static bool IsFastPathEligible(BitFieldModel field, Endianness endianness)
+    private static bool IsFastPathEligible(BitFieldModel field, BitOrder endianness)
     {
-        if (endianness != Endianness.LittleEndian)
+        // TODO: determine if we can make this safe across platforms.
+        return false;
+
+        if (endianness != BitOrder.LSBFirst)
             return false;
 
         int width = field.Length;
@@ -209,8 +187,8 @@ internal static class OwnedRegisterEmitter
     {
         sb.OpenBlock($"{accessibility} static {plan.Symbol.Name} From(ReadOnlySpan<byte> span)");
 
-        sb.Write($"if (span.Length < {plan.SizeBytes})\n", indent: true);
-        sb.Write("    throw new System.ArgumentException(\"Span too small.\", nameof(span));\n", indent: true);
+        sb.Write($"if (span.Length < {plan.SizeBytes})\r\n", indent: true);
+        sb.Write("    throw new System.ArgumentException(\"Span too small.\", nameof(span));\r\n", indent: true);
         sb.Line();
 
         sb.OpenBlock($"return new {plan.Symbol.Name}");
@@ -246,7 +224,7 @@ internal static class OwnedRegisterEmitter
         if (plan.Numeric == NumericKind.Byte)
             sb.Write($"_value = span[0]", indent: true);
         else
-            sb.Write($"_value = BinaryPrimitives.Read{backingType}{plan.Endianness}(span)", indent: true);
+            sb.Write($"_value = BinaryPrimitives.Read{backingType}{BitOrderToEndianness(plan.BitOrder)}(span)", indent: true);
 
         sb.Line();
     }
@@ -257,16 +235,14 @@ internal static class OwnedRegisterEmitter
 
         sb.OpenBlock($"{accessibility} void WriteTo(Span<byte> span)");
 
-        sb.Write($"if (span.Length < {numericBits / 8})\n", indent: true);
-        sb.Write("    throw new System.ArgumentException(\"Span too small.\", nameof(span));\n", indent: true);
+        sb.Write($"if (span.Length < {numericBits / 8})\r\n", indent: true);
+        sb.Write("    throw new System.ArgumentException(\"Span too small.\", nameof(span));\r\n", indent: true);
         sb.Line();
-
-        string backingType = $"UInt{numericBits}";
 
         if (plan.Numeric == NumericKind.Byte)
             sb.Line("span[0] = _value;");
         else
-            sb.Line($"BinaryPrimitives.Write{backingType}{plan.Endianness}(span, _value);");
+            sb.Line($"BinaryPrimitives.WriteUInt{numericBits}{BitOrderToEndianness(plan.BitOrder)}(span, _value);");
 
         sb.CloseBlock();
     }
@@ -275,35 +251,35 @@ internal static class OwnedRegisterEmitter
     {
         int numericBits = (int)plan.Numeric!;
 
+        if ((numericBits / 8) == plan.SizeBytes)
+        {
+            sb.Write($"{accessibility} void WriteLogical(Span<byte> span) => WriteTo(span);\r\n", indent: true);
+            return;
+        }
+
         sb.OpenBlock($"{accessibility} void WriteLogical(Span<byte> span)");
 
-        sb.Write($"if (span.Length < {plan.SizeBytes})\n", indent: true);
-        sb.Write("    throw new System.ArgumentException(\"Span too small.\", nameof(span));\n", indent: true);
+        sb.Write($"if (span.Length < {plan.SizeBytes})\r\n", indent: true);
+        sb.Write("    throw new System.ArgumentException(\"Span too small.\", nameof(span));\r\n", indent: true);
         sb.Line();
-
-        string endianness = plan.Endianness switch
-        {
-            Endianness.LittleEndian => "LittleEndian",
-            Endianness.BigEndian => "BigEndian"
-        };
-
-        string backingType = $"UInt{numericBits}";
 
         sb.Line($"Span<byte> tmp = stackalloc byte[{numericBits / 8}];");
 
         if (plan.Numeric == NumericKind.Byte)
             sb.Line("tmp[0] = _value;");
         else
-            sb.Line($"BinaryPrimitives.Write{backingType}{endianness}(tmp, _value);");
+            sb.Line($"BinaryPrimitives.WriteUInt{numericBits}{BitOrderToEndianness(plan.BitOrder)}(tmp, _value);");
 
         sb.Line($"tmp.Slice(0, {plan.SizeBytes}).CopyTo(span);");
 
         sb.CloseBlock();
     }
 
-    private static void EmitCasts(LoweredLayout plan, string backingType, SourceBuilder sb)
+    private static void EmitConversions(LoweredLayout plan, string accessibility, string backingType, SourceBuilder sb)
     {
         string symbolName = plan.Symbol.Name;
+        sb.Line($"{accessibility} void SetRaw({backingType} value) => _value = value;");
+        sb.Line();
         sb.Line($"public static implicit operator {backingType}({symbolName} value) => value._value;");
         sb.Line();
         sb.Line($"public static explicit operator {symbolName}({backingType} value) => new {symbolName} {{ _value = value }};");

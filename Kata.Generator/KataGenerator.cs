@@ -59,6 +59,7 @@ public sealed class KataGenerator : IIncrementalGenerator
                 case OwnedKind.Blob:
                     break;
                 case OwnedKind.Expanded:
+                    ExpandedEmitter.EmitExpandedBody(plan, sb);
                     break;
             }
 

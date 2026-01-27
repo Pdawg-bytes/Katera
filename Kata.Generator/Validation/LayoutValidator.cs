@@ -14,8 +14,8 @@ internal static class LayoutValidator
         int logicalSizeBits = model.ComputedSizeBytes * 8;
         bool allowOverlap   = model.AllowOverlap && model.Mode != StorageMode.Expanded;
 
-        var spans    = new List<(BitFieldModel? field, int start, int end)>();
-        int cursor   = 0;
+        var spans  = new List<(BitFieldModel? field, int start, int end)>();
+        int cursor = 0;
 
         foreach (var item in model.Items)
         {

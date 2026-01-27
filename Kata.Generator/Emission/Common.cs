@@ -6,15 +6,33 @@ namespace Kata.Generator.Emission;
 
 internal static class Common
 {
-    internal static void EmitOwnedHeader(LoweredLayout plan, SourceBuilder sb)
-    {
-        var accessibility = plan.Symbol.DeclaredAccessibility switch
-        {
-            Accessibility.Public   => "public",
-            Accessibility.Internal => "internal",
-            Accessibility.Private  => "private",
-        };
+    internal static void EmitOwnedHeader(LoweredLayout plan, SourceBuilder sb) =>
+        sb.OpenBlock($"{GetAccessibility(plan.Symbol.DeclaredAccessibility)} partial struct {plan.Symbol.Name}");
 
-        sb.OpenBlock($"{accessibility} partial struct {plan.Symbol.Name}");
+
+    internal static string GetMaskLiteral(int bitWidth)
+    {
+        if (bitWidth == 0)
+            return "0";
+
+        if (bitWidth >= 64)
+            return "0xFFFFFFFFFFFFFFFF";
+
+        ulong mask = (1UL << bitWidth) - 1UL;
+        return "0x" + mask.ToString("X");
     }
+
+    internal static string GetAccessibility(Accessibility accessibility) => accessibility switch
+    {
+        Accessibility.Public   => "public",
+        Accessibility.Internal => "internal",
+        _                      => "private"
+    };
+
+    internal static string BitOrderToEndianness(BitOrder bitOrder) => bitOrder switch
+    {
+        BitOrder.LSBFirst => "LittleEndian",
+        BitOrder.MSBFirst => "BigEndian",
+        _                 => ""
+    };
 }
