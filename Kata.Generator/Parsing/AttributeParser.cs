@@ -1,6 +1,7 @@
 ﻿using System.Linq;
 using Microsoft.CodeAnalysis;
 using Kata.Generator.Validation;
+using System.Collections.Immutable;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
@@ -10,9 +11,10 @@ namespace Kata.Generator.Parsing;
 
 internal static class AttributeParser
 {
-    internal static LayoutParseResult ParseLayout(GeneratorAttributeSyntaxContext ctx)
+    internal static ParseResult<BitLayoutModel> ParseLayout(GeneratorAttributeSyntaxContext ctx)
     {
-        var symbol = (INamedTypeSymbol)ctx.TargetSymbol;
+        var symbol      = (INamedTypeSymbol)ctx.TargetSymbol;
+        var diagnostics = ImmutableArray.CreateBuilder<DiagnosticInfo>();
 
         bool isPartial = symbol.DeclaringSyntaxReferences.Any(syntaxRef =>
             syntaxRef.GetSyntax() is TypeDeclarationSyntax declaration &&
@@ -24,13 +26,13 @@ internal static class AttributeParser
                 !symbol.IsValueType ? "target must be a struct" :
                 "struct must be declared 'partial'";
 
-            var diag = Diagnostic.Create(
+            diagnostics.Add(new DiagnosticInfo(
                 Diagnostics.Bit004_InvalidTarget,
-                symbol.Locations.FirstOrDefault(),
+                symbol.Locations.FirstOrDefault()?.ToString(),
                 symbol.ToDisplayString(),
-                reason);
+                reason));
 
-            return new LayoutParseResult(null, diag);
+            return ParseResult<BitLayoutModel>.Failure(diagnostics.ToArray());
         }
 
         int size          = 0;
@@ -48,21 +50,16 @@ internal static class AttributeParser
                 switch (arg.Key)
                 {
                     case "Size":         size = (int)arg.Value.Value!; break;
-                    case "Mode":         mode = (StorageMode)arg.Value.Value!; break;
+                    case "Mode":         mode = (StorageMode)(int)arg.Value.Value!; break;
                     case "AllowOverlap": allowOverlap = (bool)arg.Value.Value!; break;
-                    case "BitOrder":     bitOrder = (BitOrder)arg.Value.Value!; break;
+                    case "BitOrder":     bitOrder = (BitOrder)(int)arg.Value.Value!; break;
                 }
             }
         }
 
-        var model = new BitLayoutModel(symbol, size, mode, allowOverlap, bitOrder);
-        return new LayoutParseResult(model, null);
-    }
-
-
-    internal static void ParseFields(BitLayoutModel model, SourceProductionContext ctx)
-    {
-        foreach (var member in model.Symbol.GetMembers())
+        var itemsBuilder = ImmutableArray.CreateBuilder<LayoutItem>();
+        
+        foreach (var member in symbol.GetMembers())
         {
             foreach (var attr in member.GetAttributes())
             {
@@ -71,9 +68,9 @@ internal static class AttributeParser
 
                 if (member.IsStatic)
                 {
-                    ctx.ReportDiagnostic(Diagnostic.Create(
+                    diagnostics.Add(new DiagnosticInfo(
                         Diagnostics.Bit004_InvalidTarget,
-                        member.Locations.FirstOrDefault(),
+                        member.Locations.FirstOrDefault()?.ToString(),
                         member.ToDisplayString(),
                         "Pad cannot be applied to static members"));
 
@@ -81,33 +78,62 @@ internal static class AttributeParser
                 }
 
                 int bits = (int)attr.ConstructorArguments[0].Value!;
-                model.Items.Add(new PadModel(bits));
+                itemsBuilder.Add(new PadItem(bits));
             }
 
             if (member is IPropertySymbol prop)
-                TryParseField(prop, model, ctx);
+            {
+                var fieldResult = TryParseField(prop);
+                if (fieldResult.Value is not null)
+                    itemsBuilder.Add(fieldResult.Value);
+                
+                diagnostics.AddRange(fieldResult.Diagnostics);
+            }
         }
+
+        var items = itemsBuilder.ToImmutable();
+        
+        var (resolvedItems, computedSize) = ResolveOffsets(items, size);
+
+        BitLayoutModel model = new
+        (
+            TypeName:          symbol.Name,
+            Namespace:         symbol.ContainingNamespace.ToDisplayString(),
+            TypeAccessibility: symbol.DeclaredAccessibility,
+            SizeBytes:         size,
+            Mode:              mode,
+            AllowOverlap:      allowOverlap,
+            BitOrder:          bitOrder,
+            Items:             resolvedItems,
+            ComputedSizeBytes: computedSize
+        );
+
+        return diagnostics.Count > 0
+            ? new ParseResult<BitLayoutModel>(model, diagnostics.ToImmutable())
+            : ParseResult<BitLayoutModel>.Success(model);
     }
 
-    private static void TryParseField(IPropertySymbol member, BitLayoutModel model, SourceProductionContext ctx)
+    private static ParseResult<BitFieldItem> TryParseField(IPropertySymbol member)
     {
+        var diagnostics = ImmutableArray.CreateBuilder<DiagnosticInfo>();
+        
         var attr = member.GetAttributes()
             .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == "Kata.BitFieldAttribute");
 
         if (attr is null)
-            return;
+            return ParseResult<BitFieldItem>.Success(null!);
 
-        var location = member.Locations.FirstOrDefault();
+        var location = member.Locations.FirstOrDefault()?.ToString();
 
         if (!IsValidBitFieldTarget(member, out var reason))
         {
-            ctx.ReportDiagnostic(Diagnostic.Create(
+            diagnostics.Add(new DiagnosticInfo(
                 Diagnostics.Bit004_InvalidTarget,
                 location,
                 member.ToDisplayString(),
-                reason));
+                reason!));
 
-            return;
+            return ParseResult<BitFieldItem>.Failure(diagnostics.ToArray());
         }
 
         int length = (int)attr.ConstructorArguments[0].Value!;
@@ -121,56 +147,70 @@ internal static class AttributeParser
 
         if (length <= 0)
         {
-            ctx.ReportDiagnostic(Diagnostic.Create(
+            diagnostics.Add(new DiagnosticInfo(
                 Diagnostics.Bit007_InvalidLength,
                 location,
                 "greater than zero",
                 length));
 
-            return;
+            return ParseResult<BitFieldItem>.Failure(diagnostics.ToArray());
         }
 
-        model.Items.Add(new BitFieldModel(
-            member.Name,
-            member.Type,
-            length,
-            offset,
-            IsSignedType(member.Type),
-            member
-        ));
+        AccessorInfo accessor = new
+        (
+            member.DeclaredAccessibility,
+            GetAccessorKind(member),
+            member.IsRequired
+        );
+
+        BitFieldItem field = new
+        (
+            Name:            member.Name,
+            TypeDisplayName: member.Type.ToDisplayString(),
+            Length:          length,
+            Offset:          offset,
+            BackingWidth:    GetTypeBitWidth(member.Type),
+            IsSigned:        IsSignedType(member.Type),
+            Accessor:        accessor
+        );
+
+        return ParseResult<BitFieldItem>.Success(field);
     }
 
-
-    internal static void ResolveOffsets(BitLayoutModel model)
+    private static (ImmutableArray<LayoutItem> Items, int ComputedSize) ResolveOffsets(
+        ImmutableArray<LayoutItem> items, int declaredSize)
     {
+        var resolvedBuilder = ImmutableArray.CreateBuilder<LayoutItem>(items.Length);
         int cursor = 0;
 
-        foreach (var item in model.Items)
+        foreach (var item in items)
         {
             switch (item)
             {
-                case BitFieldModel f:
-                    {
-                        int start = f.Offset >= 0 ? f.Offset : cursor;
-                        int end = start + f.Length;
+                case BitFieldItem field:
+                {
+                    int start = field.Offset >= 0 ? field.Offset : cursor;
+                    int end = start + field.Length;
 
-                        f.Offset = start;
+                    resolvedBuilder.Add(field with { Offset = start });
 
-                        if (end > cursor)
-                            cursor = end;
+                    if (end > cursor)
+                        cursor = end;
 
-                        break;
-                    }
+                    break;
+                }
 
-                case PadModel pad:
-                    {
-                        cursor += pad.Bits;
-                        break;
-                    }
+                case PadItem pad:
+                {
+                    resolvedBuilder.Add(pad);
+                    cursor += pad.Bits;
+                    break;
+                }
             }
         }
 
-        model.ComputedSizeBytes = model.SizeBytes == 0 ? (cursor + 7) / 8 : model.SizeBytes;
+        int computedSize = declaredSize == 0 ? (cursor + 7) / 8 : declaredSize;
+        return (resolvedBuilder.ToImmutable(), computedSize);
     }
 
 
@@ -207,8 +247,7 @@ internal static class AttributeParser
             return false;
         }
 
-        if (p.DeclaredAccessibility is Accessibility.Protected
-            or Accessibility.ProtectedOrInternal)
+        if (p.DeclaredAccessibility is Accessibility.Protected or Accessibility.ProtectedOrInternal)
         {
             reason = "protected members are not supported";
             return false;
@@ -240,13 +279,21 @@ internal static class AttributeParser
             _ => false
         };
     }
-}
 
 
-internal abstract class LayoutItem { }
+    private static AccessorKind GetAccessorKind(IPropertySymbol symbol)
+    {
+        var getter = symbol.GetMethod;
+        var setter = symbol.SetMethod;
 
-internal sealed class LayoutParseResult(BitLayoutModel? model, Diagnostic? diagnostic)
-{
-    public BitLayoutModel? Model { get; } = model;
-    public Diagnostic? Diagnostic { get; } = diagnostic;
+        if (getter is null)
+            return AccessorKind.GetOnly;
+
+        if (setter is null)
+            return AccessorKind.GetOnly;
+        else if (setter.IsInitOnly)
+            return AccessorKind.GetInit;
+        else
+            return AccessorKind.GetSet;
+    }
 }

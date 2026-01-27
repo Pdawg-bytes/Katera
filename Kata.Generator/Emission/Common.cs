@@ -7,7 +7,7 @@ namespace Kata.Generator.Emission;
 internal static class Common
 {
     internal static void EmitOwnedHeader(LoweredLayout plan, SourceBuilder sb) =>
-        sb.OpenBlock($"{GetAccessibility(plan.Symbol.DeclaredAccessibility)} partial struct {plan.Symbol.Name}");
+        sb.OpenBlock($"{GetAccessibility(plan.Accessibility)} partial struct {plan.TypeName}");
 
 
     internal static string GetMaskLiteral(int bitWidth)

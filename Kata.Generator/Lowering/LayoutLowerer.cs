@@ -2,6 +2,7 @@
 using System.Collections.Immutable;
 using System.Linq;
 using Kata.Generator.Parsing;
+using Kata;
 
 namespace Kata.Generator.Lowering;
 
@@ -29,12 +30,14 @@ internal static class LayoutLowerer
 
         return new LoweredLayout
         (
-            symbol:    model.Symbol,
-            ownedKind: ownedKind,
-            sizeBytes: size,
-            bitOrder:  model.BitOrder,
-            numeric:   numeric,
-            fields:    model.Items.OfType<BitFieldModel>().ToImmutableList()
+            TypeName:      model.TypeName,
+            Namespace:     model.Namespace,
+            Accessibility: model.TypeAccessibility,
+            OwnedKind:     ownedKind,
+            SizeBytes:     size,
+            BitOrder:      model.BitOrder,
+            Fields:        model.Items.OfType<BitFieldItem>().ToImmutableArray(),
+            Numeric:       numeric
         );
     }
 

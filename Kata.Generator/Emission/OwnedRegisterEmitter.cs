@@ -1,9 +1,8 @@
-﻿using Kata.Generator.Lowering;
+﻿using System;
 using Kata.Generator.Parsing;
+using Kata.Generator.Lowering;
 using Kata.Generator.Utilities;
-using Microsoft.CodeAnalysis;
-using System;
-using System.Numerics;
+
 using static Kata.Generator.Emission.Common;
 
 namespace Kata.Generator.Emission;
@@ -21,9 +20,7 @@ internal static class OwnedRegisterEmitter
 
         sb.Line();
 
-        string methodAccessibility = plan.Symbol.DeclaredAccessibility == Accessibility.Public
-            ? "public"
-            : "internal";
+        string methodAccessibility = GetAccessibility(plan.Accessibility);
 
         EmitFrom(plan, methodAccessibility, sb);
         sb.Line();
@@ -40,7 +37,7 @@ internal static class OwnedRegisterEmitter
     }
 
 
-    private static void EmitRegisterProperty(LoweredLayout plan, BitFieldModel field, string backingType, SourceBuilder sb)
+    private static void EmitRegisterProperty(LoweredLayout plan, BitFieldItem field, string backingType, SourceBuilder sb)
     {
         int totalBits = plan.SizeBytes * 8;
 
@@ -49,9 +46,9 @@ internal static class OwnedRegisterEmitter
             : totalBits - field.Offset - field.Length;
 
         string maskLiteral   = GetMaskLiteral(field.Length);
-        string accessibility = GetAccessibility(field.Accessibility);
+        string accessibility = GetAccessibility(field.Accessor.Accessibility);
 
-        string typeName = field.Type.ToDisplayString();
+        string typeName = field.TypeDisplayName;
 
         var getter = SelectGetter(plan, field, backingType, shift, maskLiteral);
         var setter = SelectSetter(plan, field, backingType, shift, maskLiteral);
@@ -64,9 +61,9 @@ internal static class OwnedRegisterEmitter
     }
 
 
-    private static Action<SourceBuilder> SelectGetter(LoweredLayout plan, BitFieldModel field, string backingType, int shift, string maskLiteral)
+    private static Action<SourceBuilder> SelectGetter(LoweredLayout plan, BitFieldItem field, string backingType, int shift, string maskLiteral)
     {
-        if (field.Type.SpecialType == SpecialType.System_Boolean)
+        if (field.TypeDisplayName == "bool")
             return sb => sb.Line($"get => ((_value >> {shift}) & 1) != 0;");
 
         if (IsFastPathEligible(field, plan.BitOrder))
@@ -75,11 +72,11 @@ internal static class OwnedRegisterEmitter
         bool isFullWidth = field.Offset == 0 && field.Length == (int)plan.Numeric! * 8;
 
         if (isFullWidth)
-            return sb => sb.Line($"get => ({field.Type.ToDisplayString()})_value;");
+            return sb => sb.Line($"get => ({field.TypeDisplayName})_value;");
 
         if (!field.IsSigned || field.BackingWidth == field.Length)
         {
-            string typeName = field.Type.ToDisplayString();
+            string typeName = field.TypeDisplayName;
             return sb => sb.Line(
                 $"get => ({typeName})((({backingType})((_value >> {shift}) & (({backingType}){maskLiteral}))));");
         }
@@ -87,15 +84,15 @@ internal static class OwnedRegisterEmitter
         return sb => EmitSignedGetter(sb, field, (int)plan.Numeric!, backingType, shift, maskLiteral);
     }
 
-    private static Action<SourceBuilder>? SelectSetter(LoweredLayout plan, BitFieldModel field, string backingType, int shift, string maskLiteral)
+    private static Action<SourceBuilder>? SelectSetter(LoweredLayout plan, BitFieldItem field, string backingType, int shift, string maskLiteral)
     {
-        if (field.AccessorKind == AccessorKind.GetOnly)
+        if (field.Accessor.AccessorKind == AccessorKind.GetOnly)
             return null;
 
-        string accessor = field.AccessorKind == AccessorKind.GetSet ? "set" : "init";
+        string accessor = field.Accessor.AccessorKind == AccessorKind.GetSet ? "set" : "init";
 
-        if (field.Type.SpecialType == SpecialType.System_Boolean)
-            return sb => EmitBoolSetter(sb, accessor, backingType, shift, field.AccessorKind);
+        if (field.TypeDisplayName == "bool")
+            return sb => EmitBoolSetter(sb, accessor, backingType, shift, field.Accessor.AccessorKind);
 
         if (IsFastPathEligible(field, plan.BitOrder))
             return sb => EmitFastPathSetter(sb, field, accessor, backingType);
@@ -112,9 +109,9 @@ internal static class OwnedRegisterEmitter
     }
 
 
-    private static void EmitSignedGetter(SourceBuilder sb, BitFieldModel field, int backingWidth, string backingType, int shift, string maskLiteral)
+    private static void EmitSignedGetter(SourceBuilder sb, BitFieldItem field, int backingWidth, string backingType, int shift, string maskLiteral)
     {
-        string typeName           = field.Type.ToDisplayString();
+        string typeName           = field.TypeDisplayName;
         string signedIntermediate = GetSignedIntermediateType(backingType);
         int shiftAmount           = backingWidth - field.Length;
 
@@ -124,9 +121,9 @@ internal static class OwnedRegisterEmitter
         sb.CloseBlock();
     }
 
-    private static void EmitFastPathGetter(SourceBuilder sb, BitFieldModel field, string backingType)
+    private static void EmitFastPathGetter(SourceBuilder sb, BitFieldItem field, string backingType)
     {
-        string typeName = field.Type.ToDisplayString();
+        string typeName = field.TypeDisplayName;
         int index       = field.Offset / field.Length;
 
         sb.OpenBlock("get");
@@ -142,9 +139,9 @@ internal static class OwnedRegisterEmitter
             $"{accessor} => _value = (_value & ~(({backingType})1 << {shift})) | " +
             $"(value ? (({backingType})1 << {shift}) : 0);");
 
-    private static void EmitFastPathSetter(SourceBuilder sb, BitFieldModel field, string accessor, string backingType)
+    private static void EmitFastPathSetter(SourceBuilder sb, BitFieldItem field, string accessor, string backingType)
     {
-        string typeName = field.Type.ToDisplayString();
+        string typeName = field.TypeDisplayName;
         int index       = field.Offset / field.Length;
 
         sb.OpenBlock(accessor);
@@ -165,9 +162,9 @@ internal static class OwnedRegisterEmitter
         };
     }
 
-    private static bool IsFastPathEligible(BitFieldModel field, BitOrder endianness)
+    private static bool IsFastPathEligible(BitFieldItem field, BitOrder endianness)
     {
-        // TODO: determine if we can make this safe across platforms.
+        // TODO: we need to actually determine if this is faster or if it's safe on other hosts.
         return false;
 
         if (endianness != BitOrder.LSBFirst)
@@ -185,13 +182,13 @@ internal static class OwnedRegisterEmitter
 
     private static void EmitFrom(LoweredLayout plan, string accessibility, SourceBuilder sb)
     {
-        sb.OpenBlock($"{accessibility} static {plan.Symbol.Name} From(ReadOnlySpan<byte> span)");
+        sb.OpenBlock($"{accessibility} static {plan.TypeName} From(ReadOnlySpan<byte> span)");
 
         sb.Write($"if (span.Length < {plan.SizeBytes})\r\n", indent: true);
         sb.Write("    throw new System.ArgumentException(\"Span too small.\", nameof(span));\r\n", indent: true);
         sb.Line();
 
-        sb.OpenBlock($"return new {plan.Symbol.Name}");
+        sb.OpenBlock($"return new {plan.TypeName}");
         EmitValueAssignment(plan, sb);
         sb.CloseBlock(";");
 
@@ -200,7 +197,7 @@ internal static class OwnedRegisterEmitter
 
     private static void EmitTryFrom(LoweredLayout plan, string accessibility, SourceBuilder sb)
     {
-        sb.OpenBlock($"{accessibility} static bool TryFrom(ReadOnlySpan<byte> span, out {plan.Symbol.Name} value)");
+        sb.OpenBlock($"{accessibility} static bool TryFrom(ReadOnlySpan<byte> span, out {plan.TypeName} value)");
 
         sb.OpenBlock($"if (span.Length < {plan.SizeBytes})");
         sb.Line("value = default;");
@@ -208,7 +205,7 @@ internal static class OwnedRegisterEmitter
         sb.CloseBlock();
         sb.Line();
 
-        sb.OpenBlock($"value = new {plan.Symbol.Name}");
+        sb.OpenBlock($"value = new {plan.TypeName}");
         EmitValueAssignment(plan, sb);
         sb.CloseBlock(";");
         sb.Line();
@@ -277,7 +274,7 @@ internal static class OwnedRegisterEmitter
 
     private static void EmitConversions(LoweredLayout plan, string accessibility, string backingType, SourceBuilder sb)
     {
-        string symbolName = plan.Symbol.Name;
+        string symbolName = plan.TypeName;
         sb.Line($"{accessibility} void SetRaw({backingType} value) => _value = value;");
         sb.Line();
         sb.Line($"public static implicit operator {backingType}({symbolName} value) => value._value;");

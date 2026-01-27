@@ -1,27 +1,25 @@
-﻿using System.Linq;
-using Kata.Generator.Parsing;
-using Microsoft.CodeAnalysis;
-using System.Collections.Generic;
-
-using static Kata.Generator.Utilities.TypeHelpers;
+﻿using Kata.Generator.Parsing;
+using System.Collections.Immutable;
 
 namespace Kata.Generator.Validation;
 
 internal static class LayoutValidator
 {
-    internal static void Validate(BitLayoutModel model, SourceProductionContext ctx)
+    internal static ValidationResult Validate(BitLayoutModel model)
     {
+        var diagnostics = ImmutableArray.CreateBuilder<DiagnosticInfo>();
+        
         int logicalSizeBits = model.ComputedSizeBytes * 8;
         bool allowOverlap   = model.AllowOverlap && model.Mode != StorageMode.Expanded;
 
-        var spans  = new List<(BitFieldModel? field, int start, int end)>();
+        var spans  = ImmutableArray.CreateBuilder<(BitFieldItem? field, int start, int end)>();
         int cursor = 0;
 
         foreach (var item in model.Items)
         {
             switch (item)
             {
-                case BitFieldModel f:
+                case BitFieldItem f:
                     {
                         int start = f.Offset >= 0 ? f.Offset : cursor;
                         int end = start + f.Length;
@@ -34,7 +32,7 @@ internal static class LayoutValidator
                         break;
                     }
 
-                case PadModel pad:
+                case PadItem pad:
                     {
                         int start = cursor;
                         int end = start + pad.Bits;
@@ -56,9 +54,9 @@ internal static class LayoutValidator
         {
             if (start > expectedEnd)
             {
-                ctx.ReportDiagnostic(Diagnostic.Create(
+                diagnostics.Add(new DiagnosticInfo(
                     Diagnostics.Bit006_Gap,
-                    model.Symbol.Locations.FirstOrDefault(),
+                    null,
                     expectedEnd,
                     start));
             }
@@ -74,9 +72,9 @@ internal static class LayoutValidator
                 if (field is null) continue;
                 if (end > logicalSizeBits)
                 {
-                    ctx.ReportDiagnostic(Diagnostic.Create(
+                    diagnostics.Add(new DiagnosticInfo(
                         Diagnostics.Bit001_ExceedsSize,
-                        field.Location,
+                        null,
                         field.Name,
                         end,
                         logicalSizeBits));
@@ -89,9 +87,9 @@ internal static class LayoutValidator
              model.Mode == StorageMode.Register) &&
              model.ComputedSizeBytes > 8)
         {
-            ctx.ReportDiagnostic(Diagnostic.Create(
+            diagnostics.Add(new DiagnosticInfo(
                 Diagnostics.Bit003_InvalidSize,
-                model.Symbol.Locations.FirstOrDefault(),
+                null,
                 model.ComputedSizeBytes));
         }
 
@@ -102,19 +100,19 @@ internal static class LayoutValidator
             int typeBits = field.BackingWidth;
             if (field.Length > typeBits)
             {
-                ctx.ReportDiagnostic(Diagnostic.Create(
+                diagnostics.Add(new DiagnosticInfo(
                     Diagnostics.Bit002_TypeTooSmall,
-                    field.Location,
-                    field.Type.ToDisplayString(),
+                    null,
+                    field.TypeDisplayName,
                     field.Length,
                     typeBits));
             }
         }
 
-
+        // BIT005
         if (!allowOverlap)
         {
-            var owner = new BitFieldModel?[logicalSizeBits];
+            var owner = new BitFieldItem?[logicalSizeBits];
 
             foreach (var (field, start, end) in spans)
             {
@@ -123,9 +121,9 @@ internal static class LayoutValidator
                 {
                     if (owner[bit] is { } other)
                     {
-                        ctx.ReportDiagnostic(Diagnostic.Create(
+                        diagnostics.Add(new DiagnosticInfo(
                             Diagnostics.Bit005_Overlap,
-                            field.Location,
+                            null,
                             field.Name,
                             other.Name,
                             bit));
@@ -135,5 +133,9 @@ internal static class LayoutValidator
                 }
             }
         }
+
+        return diagnostics.Count > 0
+            ? ValidationResult.Failure(diagnostics.ToArray())
+            : ValidationResult.Success();
     }
 }

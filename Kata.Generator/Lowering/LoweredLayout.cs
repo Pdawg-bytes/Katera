@@ -19,12 +19,14 @@ internal enum NumericKind
     ULong  = 64
 }
 
-internal sealed class LoweredLayout(INamedTypeSymbol symbol, OwnedKind ownedKind, int sizeBytes, BitOrder bitOrder, ImmutableList<BitFieldModel> fields, NumericKind? numeric)
-{
-    internal readonly INamedTypeSymbol Symbol             = symbol;
-    internal readonly OwnedKind OwnedKind                 = ownedKind;
-    internal readonly int SizeBytes                       = sizeBytes;
-    internal readonly BitOrder BitOrder                   = bitOrder;
-    internal readonly ImmutableList<BitFieldModel> Fields = fields;
-    internal readonly NumericKind? Numeric                = numeric;
-}
+internal record LoweredLayout
+(
+    string TypeName,
+    string Namespace,
+    Accessibility Accessibility,
+    OwnedKind OwnedKind,
+    int SizeBytes,
+    BitOrder BitOrder,
+    ImmutableArray<BitFieldItem> Fields,
+    NumericKind? Numeric
+);

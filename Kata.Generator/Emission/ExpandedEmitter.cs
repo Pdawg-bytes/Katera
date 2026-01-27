@@ -13,13 +13,13 @@ internal static class ExpandedEmitter
     }
 
 
-    private static void EmitExpandedProperty(LoweredLayout plan, BitFieldModel field, SourceBuilder sb, SourceBuilder readSb, SourceBuilder writeSb)
+    private static void EmitExpandedProperty(LoweredLayout plan, BitFieldItem field, SourceBuilder sb, SourceBuilder readSb, SourceBuilder writeSb)
     {
         int shift            = field.Offset;
         string maskLiteral   = GetMaskLiteral(field.Length);
-        string typeName      = field.Type.ToDisplayString();
-        string accessibility = GetAccessibility(field.Accessibility);
-        bool hasSetter       = field.AccessorKind != AccessorKind.GetOnly;
+        string typeName      = field.TypeDisplayName;
+        string accessibility = GetAccessibility(field.Accessor.Accessibility);
+        bool hasSetter       = field.Accessor.AccessorKind != AccessorKind.GetOnly;
 
         if (hasSetter)
         {

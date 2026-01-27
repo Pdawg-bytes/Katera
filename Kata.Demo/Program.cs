@@ -18,7 +18,7 @@ internal partial struct Test
     internal partial ushort Test4 { get; init; }
 }
 
-[BitLayout(BitOrder = BitOrder.LSBFirst)]
+[BitLayout(BitOrder = BitOrder.MSBFirst)]
 internal partial struct IPv4Start
 {
     [BitField(4)] internal partial byte Version { get; set; }
