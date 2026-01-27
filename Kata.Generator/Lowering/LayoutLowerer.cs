@@ -1,8 +1,6 @@
 ﻿using System;
-using System.Collections.Immutable;
-using System.Linq;
 using Kata.Generator.Parsing;
-using Kata;
+using System.Collections.Immutable;
 
 namespace Kata.Generator.Lowering;
 

@@ -39,11 +39,7 @@ internal static class OwnedRegisterEmitter
 
     private static void EmitRegisterProperty(LoweredLayout plan, BitFieldItem field, string backingType, SourceBuilder sb)
     {
-        int totalBits = plan.SizeBytes * 8;
-
-        int shift = plan.BitOrder == BitOrder.LSBFirst
-            ? field.Offset
-            : totalBits - field.Offset - field.Length;
+        int shift = ComputeShift(plan, field);
 
         string maskLiteral   = GetMaskLiteral(field.Length);
         string accessibility = GetAccessibility(field.Accessor.Accessibility);
@@ -151,16 +147,6 @@ internal static class OwnedRegisterEmitter
         sb.CloseBlock();
     }
 
-
-    private static string GetSignedIntermediateType(string backingType)
-    {
-        return backingType switch
-        {
-            "byte" or "sbyte" or "ushort" or "short" or "uint" or "int" => "int",
-            "ulong" or "long"                                           => "long",
-            _                                                           => "int"
-        };
-    }
 
     private static bool IsFastPathEligible(BitFieldItem field, BitOrder endianness)
     {

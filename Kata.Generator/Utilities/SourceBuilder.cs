@@ -8,6 +8,14 @@ internal sealed class SourceBuilder
     private readonly StringBuilder _sb = new();
     private int _indent;
 
+    internal void SetIndent(int level)
+    {
+        if (level < 0)
+            throw new Exception("SourceBuilder indent level cannot be negative");
+
+        _indent = level;
+    }
+
     internal void Line(string? text = null)
     {
         if (text is null)

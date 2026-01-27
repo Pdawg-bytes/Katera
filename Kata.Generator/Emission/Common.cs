@@ -1,4 +1,5 @@
 ﻿using Microsoft.CodeAnalysis;
+using Kata.Generator.Parsing;
 using Kata.Generator.Lowering;
 using Kata.Generator.Utilities;
 
@@ -35,4 +36,22 @@ internal static class Common
         BitOrder.MSBFirst => "BigEndian",
         _                 => ""
     };
+
+    internal static string GetSignedIntermediateType(string backingType)
+    {
+        return backingType switch
+        {
+            "byte" or "sbyte" or "ushort" or "short" or "uint" or "int" => "int",
+            "ulong" or "long"                                           => "long",
+            _                                                           => "int"
+        };
+    }
+
+    internal static int ComputeShift(LoweredLayout plan, BitFieldItem field)
+    {
+        int totalBits = plan.SizeBytes * 8;
+        return plan.BitOrder == BitOrder.LSBFirst
+            ? field.Offset
+            : totalBits - field.Offset - field.Length;
+    }
 }

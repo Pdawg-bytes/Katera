@@ -1,11 +1,11 @@
-﻿using Microsoft.CodeAnalysis;
+﻿using System.Linq;
+using Microsoft.CodeAnalysis;
 using Kata.Generator.Parsing;
 using Kata.Generator.Lowering;
 using Kata.Generator.Emission;
 using Kata.Generator.Utilities;
 using Kata.Generator.Validation;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using System.Linq;
 
 using static Kata.Generator.Emission.Common;
 
@@ -85,6 +85,7 @@ public sealed class KataGenerator : IIncrementalGenerator
             sb.CloseBlock();
 
             // Overlay type
+            sb.Line();
             OverlayEmitter.EmitOverlay(plan, sb);
 
             if (!string.IsNullOrEmpty(ns))
