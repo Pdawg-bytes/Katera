@@ -1,6 +1,4 @@
-﻿using Kata;
-
-namespace Kata.Demo;
+﻿namespace Kata.Demo;
 
 [BitLayout]
 internal partial struct Test
@@ -28,6 +26,28 @@ internal partial struct IPv4Start
     [BitField(16)] internal partial ushort TotalLength { get; set; }
 }
 
+[BitLayout]
+internal partial struct BlobTest
+{
+    [BitField(32)] internal partial uint Field1 { get; set; }
+    [BitField(32)] internal partial uint Field2 { get; set; }
+    [BitField(16)] internal partial ushort Field3 { get; set; }
+}
+
+[BitLayout]
+internal partial struct StraddlingBlob
+{
+    [BitField(60)] internal partial ulong Field1 { get; set; }
+    [BitField(20)] internal partial int Field2 { get; set; }
+}
+
+[BitLayout(BitOrder = BitOrder.MSBFirst)]
+internal partial struct MSBBlob
+{
+    [BitField(64)] internal partial ulong Field1 { get; set; }
+    [BitField(64)] internal partial ulong Field2 { get; set; }
+    [BitField(32)] internal partial uint Field3 { get; set; }
+}
 
 class Program
 {

@@ -29,13 +29,21 @@ internal static class OverlayEmitter
         sb.CloseBlock();
     }
 
+
     private static void EmitOverlayProperty(LoweredLayout plan, BitFieldItem field, SourceBuilder sb)
     {
         int shift            = ComputeShift(plan, field);
         string maskLiteral   = GetMaskLiteral(field.Length);
         string accessibility = GetAccessibility(field.Accessor.Accessibility);
         string typeName      = field.TypeDisplayName;
-        string backingType   = plan.Numeric!.ToString().ToLowerInvariant();
+
+        if (plan.OwnedKind == OwnedKind.Blob)
+        {
+            EmitBlobOverlayProperty(plan, field, shift, maskLiteral, accessibility, typeName, sb);
+            return;
+        }
+
+        string backingType = plan.Numeric!.ToString().ToLowerInvariant();
 
         var getter = SelectOverlayGetter(plan, field, backingType, shift, maskLiteral);
         var setter = SelectOverlaySetter(plan, field, backingType, shift, maskLiteral);
@@ -217,5 +225,318 @@ internal static class OverlayEmitter
         sb.Line($"return new {overlayName}(span);");
         sb.CloseBlock();
         sb.Line();
+    }
+
+    private static void EmitBlobOverlayProperty(LoweredLayout plan, BitFieldItem field, int shift, string maskLiteral, string accessibility, string typeName, SourceBuilder sb)
+    {
+        int ulongIndex         = shift / 64;
+        int bitOffsetInULong   = shift % 64;
+        bool straddlesBoundary = (bitOffsetInULong + field.Length) > 64;
+
+        string maskLiteralUL = GetMaskLiteralULong(field.Length);
+
+        int ulongOffset    = ulongIndex * 8;
+        int remainingBytes = plan.SizeBytes - ulongOffset;
+        bool hasFullULong  = remainingBytes >= 8;
+
+        sb.OpenBlock($"{accessibility} {typeName} {field.Name}");
+
+        if (straddlesBoundary)
+            EmitBlobOverlayStraddlingGetter(sb, plan, field, ulongIndex, bitOffsetInULong, maskLiteralUL, hasFullULong);
+        else
+            EmitBlobOverlaySimpleGetter(sb, plan, field, ulongIndex, bitOffsetInULong, maskLiteralUL, hasFullULong);
+
+        if (field.Accessor.AccessorKind != AccessorKind.GetOnly)
+        {
+            string accessor = field.Accessor.AccessorKind == AccessorKind.GetSet ? "set" : "init";
+            
+            if (straddlesBoundary)
+                EmitBlobOverlayStraddlingSetter(sb, plan, field, ulongIndex, bitOffsetInULong, maskLiteralUL, accessor, hasFullULong);
+            else
+                EmitBlobOverlaySimpleSetter(sb, plan, field, ulongIndex, bitOffsetInULong, maskLiteralUL, accessor, hasFullULong);
+        }
+
+        sb.CloseBlock();
+        sb.Line();
+    }
+
+    private static void EmitBlobOverlaySimpleGetter(SourceBuilder sb, LoweredLayout plan, BitFieldItem field, int ulongIndex, int bitOffsetInULong, string maskLiteral, bool hasFullULong)
+    {
+        int offset = ulongIndex * 8;
+
+        sb.OpenBlock("get");
+        
+        if (hasFullULong)
+        {
+            sb.Line($"ulong data = BinaryPrimitives.ReadUInt64{BitOrderToEndianness(plan.BitOrder)}(_span.Slice({offset}));");
+        }
+        else
+        {
+            int remainingBytes = plan.SizeBytes - offset;
+            sb.Write("ulong data = (", indent: true);
+            for (int b = 0; b < remainingBytes; b++)
+            {
+                if (b > 0) sb.Write(" | ", indent: false);
+                
+                if (plan.BitOrder == BitOrder.LSBFirst)
+                    sb.Write($"((ulong)_span[{offset + b}] << {b * 8})", indent: false);
+                else
+                    sb.Write($"((ulong)_span[{offset + b}] << {(remainingBytes - 1 - b) * 8})", indent: false);
+            }
+            sb.Write(");\r\n", indent: false);
+        }
+        
+        if (field.TypeDisplayName == "bool")
+        {
+            sb.Line($"return ((data >> {bitOffsetInULong}) & 1) != 0;");
+        }
+        else if (bitOffsetInULong == 0 && field.Length == 64)
+        {
+            sb.Line($"return ({field.TypeDisplayName})data;");
+        }
+        else if (!field.IsSigned || field.BackingWidth == field.Length)
+        {
+            sb.Line($"return ({field.TypeDisplayName})((data >> {bitOffsetInULong}) & {maskLiteral});");
+        }
+        else
+        {
+            string signedIntermediate = GetSignedIntermediateType("ulong");
+            int shiftAmount = 64 - field.Length;
+            sb.Line($"ulong raw = (data >> {bitOffsetInULong}) & {maskLiteral};");
+            sb.Line($"return ({field.TypeDisplayName})(({signedIntermediate})(raw << {shiftAmount}) >> {shiftAmount});");
+        }
+        
+        sb.CloseBlock();
+    }
+
+    private static void EmitBlobOverlaySimpleSetter(SourceBuilder sb, LoweredLayout plan, BitFieldItem field, int ulongIndex, int bitOffsetInULong, string maskLiteral, string accessor, bool hasFullULong)
+    {
+        int offset = ulongIndex * 8;
+
+        sb.OpenBlock(accessor);
+        
+        if (hasFullULong)
+        {
+            sb.Line($"ulong data = BinaryPrimitives.ReadUInt64{BitOrderToEndianness(plan.BitOrder)}(_span.Slice({offset}));");
+        }
+        else
+        {
+            int remainingBytes = plan.SizeBytes - offset;
+            sb.Write("ulong data = (", indent: true);
+            for (int b = 0; b < remainingBytes; b++)
+            {
+                if (b > 0) sb.Write(" | ", indent: false);
+                
+                if (plan.BitOrder == BitOrder.LSBFirst)
+                    sb.Write($"((ulong)_span[{offset + b}] << {b * 8})", indent: false);
+                else
+                    sb.Write($"((ulong)_span[{offset + b}] << {(remainingBytes - 1 - b) * 8})", indent: false);
+            }
+            sb.Write(");\r\n", indent: false);
+        }
+        
+        if (field.TypeDisplayName == "bool")
+            sb.Line($"data = (data & ~((ulong)1 << {bitOffsetInULong})) | (value ? ((ulong)1 << {bitOffsetInULong}) : 0);");
+        else if (bitOffsetInULong == 0 && field.Length == 64)
+            sb.Line($"data = (ulong)value;");
+        else
+            sb.Line($"data = (data & ~(({maskLiteral}) << {bitOffsetInULong})) | ((((ulong)value) & {maskLiteral}) << {bitOffsetInULong});");
+        
+        if (hasFullULong)
+        {
+            sb.Line($"BinaryPrimitives.WriteUInt64{BitOrderToEndianness(plan.BitOrder)}(_span.Slice({offset}), data);");
+        }
+        else
+        {
+            int remainingBytes = plan.SizeBytes - offset;
+            for (int b = 0; b < remainingBytes; b++)
+            {
+                if (plan.BitOrder == BitOrder.LSBFirst)
+                    sb.Line($"_span[{offset + b}] = (byte)(data >> {b * 8});");
+                else
+                    sb.Line($"_span[{offset + b}] = (byte)(data >> {(remainingBytes - 1 - b) * 8});");
+            }
+        }
+        
+        sb.CloseBlock();
+    }
+
+    private static void EmitBlobOverlayStraddlingGetter(SourceBuilder sb, LoweredLayout plan, BitFieldItem field, int ulongIndex, int bitOffsetInULong, string maskLiteral, bool hasFullULong)
+    {
+        int bitsInFirstULong  = 64 - bitOffsetInULong;
+        int bitsInSecondULong = field.Length - bitsInFirstULong;
+        string maskLow        = GetMaskLiteralULong(bitsInFirstULong);
+        string maskHigh       = GetMaskLiteralULong(bitsInSecondULong);
+
+        int offset1         = ulongIndex * 8;
+        int offset2         = (ulongIndex + 1) * 8;
+        int remainingBytes2 = plan.SizeBytes - offset2;
+        bool hasFullULong2  = remainingBytes2 >= 8;
+
+        sb.OpenBlock("get");
+        
+        if (hasFullULong)
+        {
+            sb.Line($"ulong data0 = BinaryPrimitives.ReadUInt64{BitOrderToEndianness(plan.BitOrder)}(_span.Slice({offset1}));");
+        }
+        else
+        {
+            int remainingBytes = plan.SizeBytes - offset1;
+            sb.Write("ulong data0 = (", indent: true);
+
+            for (int b = 0; b < remainingBytes; b++)
+            {
+                if (b > 0) sb.Write(" | ", indent: false);
+                
+                if (plan.BitOrder == BitOrder.LSBFirst)
+                    sb.Write($"((ulong)_span[{offset1 + b}] << {b * 8})", indent: false);
+                else
+                    sb.Write($"((ulong)_span[{offset1 + b}] << {(remainingBytes - 1 - b) * 8})", indent: false);
+            }
+
+            sb.Write(");\r\n", indent: false);
+        }
+        
+        if (hasFullULong2)
+        {
+            sb.Line($"ulong data1 = BinaryPrimitives.ReadUInt64{BitOrderToEndianness(plan.BitOrder)}(_span.Slice({offset2}));");
+        }
+        else
+        {
+            sb.Write("ulong data1 = (", indent: true);
+
+            for (int b = 0; b < remainingBytes2; b++)
+            {
+                if (b > 0) sb.Write(" | ", indent: false);
+                
+                if (plan.BitOrder == BitOrder.LSBFirst)
+                    sb.Write($"((ulong)_span[{offset2 + b}] << {b * 8})", indent: false);
+                else
+                    sb.Write($"((ulong)_span[{offset2 + b}] << {(remainingBytes2 - 1 - b) * 8})", indent: false);
+            }
+
+            sb.Write(");\r\n", indent: false);
+        }
+        
+        if (field.TypeDisplayName == "bool")
+        {
+            sb.Line($"return ((data0 >> {bitOffsetInULong}) & 1) != 0;");
+        }
+        else if (!field.IsSigned || field.BackingWidth == field.Length)
+        {
+            sb.Line($"ulong low = (data0 >> {bitOffsetInULong}) & {maskLow};");
+            sb.Line($"ulong high = (data1 & {maskHigh}) << {bitsInFirstULong};");
+            sb.Line($"return ({field.TypeDisplayName})(low | high);");
+        }
+        else
+        {
+            string signedIntermediate = GetSignedIntermediateType("ulong");
+            int shiftAmount           = 64 - field.Length;
+
+            sb.Line($"ulong low = (data0 >> {bitOffsetInULong}) & {maskLow};");
+            sb.Line($"ulong high = (data1 & {maskHigh}) << {bitsInFirstULong};");
+            sb.Line($"ulong combined = low | high;");
+            sb.Line($"return ({field.TypeDisplayName})(({signedIntermediate})(combined << {shiftAmount}) >> {shiftAmount});");
+        }
+        
+        sb.CloseBlock();
+    }
+
+    private static void EmitBlobOverlayStraddlingSetter(SourceBuilder sb, LoweredLayout plan, BitFieldItem field, int ulongIndex, int bitOffsetInULong, string maskLiteral, string accessor, bool hasFullULong)
+    {
+        int bitsInFirstULong = 64 - bitOffsetInULong;
+        int bitsInSecondULong = field.Length - bitsInFirstULong;
+        string maskLow = GetMaskLiteralULong(bitsInFirstULong);
+        string maskHigh = GetMaskLiteralULong(bitsInSecondULong);
+
+        int offset1 = ulongIndex * 8;
+        int offset2 = (ulongIndex + 1) * 8;
+        int remainingBytes2 = plan.SizeBytes - offset2;
+        bool hasFullULong2 = remainingBytes2 >= 8;
+
+        sb.OpenBlock(accessor);
+        
+        if (hasFullULong)
+        {
+            sb.Line($"ulong data0 = BinaryPrimitives.ReadUInt64{BitOrderToEndianness(plan.BitOrder)}(_span.Slice({offset1}));");
+        }
+        else
+        {
+            int remainingBytes = plan.SizeBytes - offset1;
+            sb.Write("ulong data0 = (", indent: true);
+            for (int b = 0; b < remainingBytes; b++)
+            {
+                if (b > 0) sb.Write(" | ", indent: false);
+                
+                if (plan.BitOrder == BitOrder.LSBFirst)
+                    sb.Write($"((ulong)_span[{offset1 + b}] << {b * 8})", indent: false);
+                else
+                    sb.Write($"((ulong)_span[{offset1 + b}] << {(remainingBytes - 1 - b) * 8})", indent: false);
+            }
+            sb.Write(");\r\n", indent: false);
+        }
+        
+        if (hasFullULong2)
+        {
+            sb.Line($"ulong data1 = BinaryPrimitives.ReadUInt64{BitOrderToEndianness(plan.BitOrder)}(_span.Slice({offset2}));");
+        }
+        else
+        {
+            sb.Write("ulong data1 = (", indent: true);
+            for (int b = 0; b < remainingBytes2; b++)
+            {
+                if (b > 0) sb.Write(" | ", indent: false);
+                
+                if (plan.BitOrder == BitOrder.LSBFirst)
+                    sb.Write($"((ulong)_span[{offset2 + b}] << {b * 8})", indent: false);
+                else
+                    sb.Write($"((ulong)_span[{offset2 + b}] << {(remainingBytes2 - 1 - b) * 8})", indent: false);
+            }
+            sb.Write(");\r\n", indent: false);
+        }
+        
+        if (field.TypeDisplayName == "bool")
+        {
+            sb.Line($"data0 = (data0 & ~((ulong)1 << {bitOffsetInULong})) | (value ? ((ulong)1 << {bitOffsetInULong}) : 0);");
+        }
+        else
+        {
+            sb.Line($"ulong val = (ulong)value & {maskLiteral};");
+            sb.Line($"data0 = (data0 & ~(({maskLow}) << {bitOffsetInULong})) | ((val & {maskLow}) << {bitOffsetInULong});");
+            sb.Line($"data1 = (data1 & ~({maskHigh})) | ((val >> {bitsInFirstULong}) & {maskHigh});");
+        }
+        
+        if (hasFullULong)
+        {
+            sb.Line($"BinaryPrimitives.WriteUInt64{BitOrderToEndianness(plan.BitOrder)}(_span.Slice({offset1}), data0);");
+        }
+        else
+        {
+            int remainingBytes = plan.SizeBytes - offset1;
+            for (int b = 0; b < remainingBytes; b++)
+            {
+                if (plan.BitOrder == BitOrder.LSBFirst)
+                    sb.Line($"_span[{offset1 + b}] = (byte)(data0 >> {b * 8});");
+                else
+                    sb.Line($"_span[{offset1 + b}] = (byte)(data0 >> {(remainingBytes - 1 - b) * 8});");
+            }
+        }
+        
+        if (hasFullULong2)
+        {
+            sb.Line($"BinaryPrimitives.WriteUInt64{BitOrderToEndianness(plan.BitOrder)}(_span.Slice({offset2}), data1);");
+        }
+        else
+        {
+            for (int b = 0; b < remainingBytes2; b++)
+            {
+                if (plan.BitOrder == BitOrder.LSBFirst)
+                    sb.Line($"_span[{offset2 + b}] = (byte)(data1 >> {b * 8});");
+                else
+                    sb.Line($"_span[{offset2 + b}] = (byte)(data1 >> {(remainingBytes2 - 1 - b) * 8});");
+            }
+        }
+        
+        sb.CloseBlock();
     }
 }

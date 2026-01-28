@@ -17,11 +17,14 @@ internal static class Common
             return "0";
 
         if (bitWidth >= 64)
-            return "0xFFFFFFFFFFFFFFFF";
+            return "0xFFFFFFFFFFFFFFFFUL";
 
         ulong mask = (1UL << bitWidth) - 1UL;
         return "0x" + mask.ToString("X");
     }
+
+    internal static string GetMaskLiteralULong(int bitWidth) =>
+        GetMaskLiteral(bitWidth) + ((bitWidth >= 64) ? "": "UL");
 
     internal static string GetAccessibility(Accessibility accessibility) => accessibility switch
     {

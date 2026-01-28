@@ -76,6 +76,7 @@ public sealed class KataGenerator : IIncrementalGenerator
                     OwnedRegisterEmitter.EmitOwnedRegisterBody(plan, sb);
                     break;
                 case OwnedKind.Blob:
+                    BlobEmitter.EmitBlobBody(plan, sb);
                     break;
                 case OwnedKind.Expanded:
                     ExpandedEmitter.EmitExpandedBody(plan, sb);

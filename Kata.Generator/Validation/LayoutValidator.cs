@@ -93,6 +93,14 @@ internal static class LayoutValidator
                 model.ComputedSizeBytes));
         }
 
+        if (model.Mode == StorageMode.Blob && model.ComputedSizeBytes <= 8)
+        {
+            diagnostics.Add(new DiagnosticInfo(
+                Diagnostics.Bit003_InvalidSize,
+                null,
+                model.ComputedSizeBytes));
+        }
+
         // BIT002
         foreach (var (field, _, _) in spans)
         {

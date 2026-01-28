@@ -28,8 +28,6 @@ internal static class OwnedRegisterEmitter
 
         sb.Line();
         EmitWriteTo(plan, methodAccessibility, sb);
-        sb.Line();
-        EmitWriteLogical(plan, methodAccessibility, sb);
 
         sb.Line();
         sb.Line();
@@ -59,6 +57,9 @@ internal static class OwnedRegisterEmitter
 
     private static Action<SourceBuilder> SelectGetter(LoweredLayout plan, BitFieldItem field, string backingType, int shift, string maskLiteral)
     {
+        if (backingType == "ulong" && !IsFastPathEligible(field, plan.BitOrder))
+            return sb => FieldAccessEmitter.EmitFieldGetterInULong(sb, field, "_value", shift, maskLiteral);
+
         if (field.TypeDisplayName == "bool")
             return sb => sb.Line($"get => ((_value >> {shift}) & 1) != 0;");
 
@@ -86,6 +87,9 @@ internal static class OwnedRegisterEmitter
             return null;
 
         string accessor = field.Accessor.AccessorKind == AccessorKind.GetSet ? "set" : "init";
+
+        if (backingType == "ulong" && !IsFastPathEligible(field, plan.BitOrder))
+            return sb => FieldAccessEmitter.EmitFieldSetterInULong(sb, field, "_value", shift, maskLiteral, accessor);
 
         if (field.TypeDisplayName == "bool")
             return sb => EmitBoolSetter(sb, accessor, backingType, shift, field.Accessor.AccessorKind);
@@ -218,7 +222,7 @@ internal static class OwnedRegisterEmitter
 
         sb.OpenBlock($"{accessibility} void WriteTo(Span<byte> span)");
 
-        sb.Write($"if (span.Length < {numericBits / 8})\r\n", indent: true);
+        sb.Write($"if (span.Length < {plan.SizeBytes})\r\n", indent: true);
         sb.Write("    throw new System.ArgumentException(\"Span too small.\", nameof(span));\r\n", indent: true);
         sb.Line();
 
@@ -226,34 +230,6 @@ internal static class OwnedRegisterEmitter
             sb.Line("span[0] = _value;");
         else
             sb.Line($"BinaryPrimitives.WriteUInt{numericBits}{BitOrderToEndianness(plan.BitOrder)}(span, _value);");
-
-        sb.CloseBlock();
-    }
-
-    private static void EmitWriteLogical(LoweredLayout plan, string accessibility, SourceBuilder sb)
-    {
-        int numericBits = (int)plan.Numeric!;
-
-        if ((numericBits / 8) == plan.SizeBytes)
-        {
-            sb.Write($"{accessibility} void WriteLogical(Span<byte> span) => WriteTo(span);\r\n", indent: true);
-            return;
-        }
-
-        sb.OpenBlock($"{accessibility} void WriteLogical(Span<byte> span)");
-
-        sb.Write($"if (span.Length < {plan.SizeBytes})\r\n", indent: true);
-        sb.Write("    throw new System.ArgumentException(\"Span too small.\", nameof(span));\r\n", indent: true);
-        sb.Line();
-
-        sb.Line($"Span<byte> tmp = stackalloc byte[{numericBits / 8}];");
-
-        if (plan.Numeric == NumericKind.Byte)
-            sb.Line("tmp[0] = _value;");
-        else
-            sb.Line($"BinaryPrimitives.WriteUInt{numericBits}{BitOrderToEndianness(plan.BitOrder)}(tmp, _value);");
-
-        sb.Line($"tmp.Slice(0, {plan.SizeBytes}).CopyTo(span);");
 
         sb.CloseBlock();
     }
