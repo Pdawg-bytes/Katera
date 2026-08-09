@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 18
+VisualStudioVersion = 18.8.12023.21 stable
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Katera", "Katera\Katera.csproj", "{9021A05B-86E0-4D45-94C8-583C30177973}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Katera.Generator", "Katera.Generator\Katera.Generator.csproj", "{AD6E9C27-89C6-4C6F-B991-BA81C468DAE5}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{9021A05B-86E0-4D45-94C8-583C30177973}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9021A05B-86E0-4D45-94C8-583C30177973}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9021A05B-86E0-4D45-94C8-583C30177973}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9021A05B-86E0-4D45-94C8-583C30177973}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AD6E9C27-89C6-4C6F-B991-BA81C468DAE5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AD6E9C27-89C6-4C6F-B991-BA81C468DAE5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AD6E9C27-89C6-4C6F-B991-BA81C468DAE5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AD6E9C27-89C6-4C6F-B991-BA81C468DAE5}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {957F2E67-ACE5-48C9-8C59-DAED7A33DBE1}
+	EndGlobalSection
+EndGlobal

@@ -1,2 +1,2 @@
-# Kata
-A source-generator-based bitfield library for C#
+# Katera
+A source generator for deterministic bitfield layouts in C#.
