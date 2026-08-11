@@ -1,0 +1,37 @@
+name: Publish Katera to NuGet
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.x'
+
+      - name: Pack NuGet Package
+        run: dotnet pack -c Release -o artifacts
+
+      - name: Authenticate with NuGet
+        id: login
+        uses: NuGet/login@v1
+        with:
+          user: Pdawg
+
+      - name: Push Package to NuGet Gallery
+        run: |
+          dotnet nuget push "artifacts/*.nupkg" \
+            --api-key "${{ steps.login.outputs.NUGET_API_KEY }}" \
+            --source https://nuget.org
