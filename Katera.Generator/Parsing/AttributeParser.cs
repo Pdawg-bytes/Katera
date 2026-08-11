@@ -28,8 +28,8 @@ internal static class AttributeParser
         if (!symbol.IsValueType || !isPartial)
         {
             string reason =
-                !symbol.IsValueType ? "target must be a struct" :
-                "struct must be declared 'partial'";
+                !symbol.IsValueType ? "target must be a 'struct' or 'record struct'" :
+                "struct or record struct must be declared 'partial'";
 
             diagnostics.Add(new DiagnosticInfo(
                 Diagnostics.Kata004_InvalidTarget,
@@ -111,6 +111,7 @@ internal static class AttributeParser
             TypeName:          symbol.Name,
             Namespace:         symbol.ContainingNamespace.ToDisplayString(),
             TypeAccessibility: symbol.DeclaredAccessibility,
+            IsRecordStruct:    symbol.IsRecord,
             SizeBytes:         sizeBytes,
             Mode:              mode,
             AllowOverlap:      allowOverlap,

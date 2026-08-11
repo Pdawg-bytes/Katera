@@ -19,7 +19,7 @@ public sealed class KateraGenerator : IIncrementalGenerator
         var parseResults = ctx.SyntaxProvider
             .ForAttributeWithMetadataName(
                 "Katera.BitLayoutAttribute",
-                static (node, _) => node is StructDeclarationSyntax,
+                static (node, _) => node is StructDeclarationSyntax || node is RecordDeclarationSyntax,
                 static (ctx, _)  => AttributeParser.ParseLayout(ctx));
 
         var analyzableLayouts = parseResults

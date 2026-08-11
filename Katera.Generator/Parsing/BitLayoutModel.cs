@@ -17,6 +17,7 @@ internal record BitLayoutModel
     string TypeName,
     string Namespace,
     Accessibility TypeAccessibility,
+    bool IsRecordStruct,
     int SizeBytes,
     StorageMode Mode,
     bool AllowOverlap,

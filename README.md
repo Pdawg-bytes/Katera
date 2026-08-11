@@ -1,5 +1,5 @@
 # Katera
-Katera is a source generator for deterministic bitfield layouts in C#. Its goal is to add support for bitfield-style structs without inheriting the undefined or host-dependent behavior of C/C++ bitfields.
+Katera is a source generator for deterministic bitfield layouts in C#. Its goal is to add support for bitfield-style structs without inheriting the undefined or host-dependent behavior of C/C++ bitfields. This also means that no implicit alignment happens, all alignment must be added manually.
 
 All bitfield layouts support LSB-first and MSB-first ordering, explicit padding, overlapping fields, and memory-backed overlays for interpreting raw bytes.
 
@@ -14,7 +14,7 @@ All bitfield layouts support LSB-first and MSB-first ordering, explicit padding,
 - Analyzer diagnostics for invalid field usage, size mismatches, overlaps, and gaps
 
 ## Usage
-Katera generates bitfield logic for `partial struct` types annotated with `BitLayoutAttribute`. Declare each bit field property as `partial` with `BitFieldAttribute` and optionally use `PadAttribute` or `Offset` to control exact placement.
+Katera generates bitfield logic for `partial struct` and `partial record struct` types annotated with `BitLayoutAttribute`. Declare each bit field property as `partial` with `BitFieldAttribute` and optionally use `PadAttribute` or `Offset` to control exact placement.
 
 ```csharp
 using Katera;
@@ -102,6 +102,8 @@ public partial struct ReadOnlyLayout
 
 The generator omits setters for get-only fields and generates `init` setters when the property is declared with `init`.
 
+These are most useful if the bitfield primarily targets overlay usage, but can also have uses in regular owned types.
+
 ## Enums and bools
 Enums are supported as long as their underlying type is one of the supported integral types.
 
@@ -111,7 +113,7 @@ public enum Color : byte { Red, Green, Blue }
 [BitLayout]
 public partial struct EnumLayout
 {
-    [BitField(2)] public partial Color Color { get; set; }
+    [BitField(2)] public partial Color Color    { get; set; }
     [BitField(1)] public partial bool IsVisible { get; set; }
 }
 ```
@@ -136,6 +138,7 @@ public partial struct WideLayout
 - `StorageMode.Register`
   - Uses a single primitive backing storage value (`byte`, `ushort`, `uint`, or `ulong`)
   - Valid only for layouts of 8 bytes or smaller
+  - Generates low-level raw helpers such as `SetRaw(TBacking)` and conversion operators for the backing value
 - `StorageMode.Blob`
   - Uses one or more `ulong` values internally
   - Valid only for layouts larger than 8 bytes
@@ -185,7 +188,7 @@ Raw helpers such as `From(ReadOnlySpan<byte>)`, `TryFrom(ReadOnlySpan<byte>, out
 - the declared `Size` in bits, rounded up to the nearest whole byte
 - or the computed size when `Size` is omitted
 
-For `Register`-backed layouts, this is the same size as the generated backing primitive (`byte`, `ushort`, `uint`, or `ulong`).
+For `Register`-backed layouts, this is the same size as the generated backing primitive (`byte`, `ushort`, `uint`, or `ulong`). `Register` mode also generates raw backing helpers like `SetRaw(...)` and implicit/explicit conversions to the primitive backing type.
 For `Blob`-backed layouts, this is the full number of bytes covered by the generated blob storage.
 
 Example:
@@ -203,6 +206,24 @@ if (PacketHeader.TryFrom(data, out var parsed))
 }
 ```
 
+## Register-backed raw conversions
+For `StorageMode.Register`, Katera generates extra helpers on the owned type. These include `SetRaw(<backing-type>)`, an implicit conversion from the bitfield type to the backing primitive, and an explicit conversion from the backing primitive back to the bitfield type.
+
+```csharp
+[BitLayout(Mode = StorageMode.Register, Size = 8)]
+public partial struct Test
+{
+    [BitField(1)] public partial bool A { get; set; }
+}
+
+Test test = new();
+test.SetRaw(0x3);
+byte raw   = test;      // implicit conversion
+Test other = (Test)0x2; // explicit conversion
+```
+
+This is useful when you want a very small register-backed layout and need direct access to the underlying primitive without invoking individual field setters.
+
 ## Diagnostics and errors
 Katera reports analyzer diagnostics for invalid layouts.
 
@@ -217,7 +238,7 @@ KATERA006 | Katera.BitLayout | Warning | Implicit gap, use Pad to make it explic
 KATERA007 | Katera.BitLayout | Error | BitField length must be greater than zero.
 
 ## Notes
-- `BitLayoutAttribute` must be applied to a `partial struct`.
+- `BitLayoutAttribute` must be applied to a `partial struct` or `partial record struct`.
 - Bit field properties must be instance properties and must be `partial`.
 - `PadAttribute` may be applied to structs, fields, or properties.
 - Explicit offsets and `Pad` may be used together to control layout precisely.

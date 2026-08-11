@@ -24,6 +24,7 @@ internal record LoweredLayout
     string TypeName,
     string Namespace,
     Accessibility Accessibility,
+    bool IsRecordStruct,
     OwnedKind OwnedKind,
     int SizeBytes,
     BitOrder BitOrder,

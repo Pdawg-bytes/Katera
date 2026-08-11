@@ -9,7 +9,10 @@ namespace Katera.Generator.Emission;
 internal static class Common
 {
     internal static void EmitOwnedHeader(LoweredLayout plan, SourceBuilder sb) =>
-        sb.OpenBlock($"{GetAccessibility(plan.Accessibility)} partial struct {plan.TypeName}");
+        sb.OpenBlock($"{GetAccessibility(plan.Accessibility)} partial {GetOwnedTypeKeyword(plan)} {plan.TypeName}");
+
+    private static string GetOwnedTypeKeyword(LoweredLayout plan)
+        => plan.IsRecordStruct ? "record struct" : "struct";
 
     internal static string GetMaskLiteral(int bitWidth)
     {

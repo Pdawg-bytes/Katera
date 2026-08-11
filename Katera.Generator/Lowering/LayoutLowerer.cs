@@ -27,14 +27,15 @@ internal static class LayoutLowerer
 
         return new LoweredLayout
         (
-            TypeName:      model.TypeName,
-            Namespace:     model.Namespace,
-            Accessibility: model.TypeAccessibility,
-            OwnedKind:     ownedKind,
-            SizeBytes:     size,
-            BitOrder:      model.BitOrder,
-            Fields:        [..model.Items.OfType<BitFieldItem>()],
-            Numeric:       numeric
+            TypeName:       model.TypeName,
+            Namespace:      model.Namespace,
+            Accessibility:  model.TypeAccessibility,
+            IsRecordStruct: model.IsRecordStruct,
+            OwnedKind:      ownedKind,
+            SizeBytes:      size,
+            BitOrder:       model.BitOrder,
+            Fields:         [..model.Items.OfType<BitFieldItem>()],
+            Numeric:        numeric
         );
     }
 
