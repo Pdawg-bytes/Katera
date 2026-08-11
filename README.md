@@ -73,6 +73,19 @@ public partial struct ExplicitOffsets
 }
 ```
 
+## Storage modes
+`StorageMode.Auto` is the default. It chooses `Register` for layouts up to 8 bytes and `Blob` for larger layouts.
+
+- `StorageMode.Register`
+  - Uses a single primitive backing storage value (`byte`, `ushort`, `uint`, or `ulong`)
+  - Valid only for layouts of 8 bytes or smaller
+  - Generates low-level raw helpers such as `SetRaw(TBacking)` and conversion operators for the backing value
+- `StorageMode.Blob`
+  - Uses one or more `ulong` values internally
+  - Valid only for layouts larger than 8 bytes
+- `StorageMode.Expanded`
+  - Uses separate generated fields and properties without unified backing storage
+  
 ## Padding
 Use `PadAttribute` to reserve unnamed bits between fields.
 
@@ -86,7 +99,7 @@ public partial struct PaddedLayout
 }
 ```
 
-This is useful when you want explicit gaps or alignment without creating a named field. If gaps are created implicitly, the analyzer will emit a `KATERA006` warning, so it is recommended to use this attribute.
+This is useful when you want explicit gaps or alignment without creating a named field. If gaps are created implicitly via `Offset`, the analyzer will emit a `KATERA006` warning, so it is recommended to use this attribute.
 
 ## Read-only and init-only properties
 Katera supports read-only bit fields and `init`-only bit fields.
@@ -131,19 +144,6 @@ public partial struct WideLayout
     [BitField(4)]  public partial uint Second { get; set; }
 }
 ```
-
-## Storage modes
-`StorageMode.Auto` is the default. It chooses `Register` for layouts up to 8 bytes and `Blob` for larger layouts.
-
-- `StorageMode.Register`
-  - Uses a single primitive backing storage value (`byte`, `ushort`, `uint`, or `ulong`)
-  - Valid only for layouts of 8 bytes or smaller
-  - Generates low-level raw helpers such as `SetRaw(TBacking)` and conversion operators for the backing value
-- `StorageMode.Blob`
-  - Uses one or more `ulong` values internally
-  - Valid only for layouts larger than 8 bytes
-- `StorageMode.Expanded`
-  - Uses separate generated fields and properties without unified backing storage
 
 ## Overlapping fields
 Set `AllowOverlap = true` to permit overlapping fields. Overlap is not allowed by default.
