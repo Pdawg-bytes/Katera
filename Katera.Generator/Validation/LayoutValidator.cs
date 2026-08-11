@@ -11,7 +11,7 @@ internal static class LayoutValidator
     {
         var diagnostics = ImmutableArray.CreateBuilder<DiagnosticInfo>();
         
-        int logicalSizeBits = model.ComputedSizeBytes * 8;
+        int logicalSizeBits = model.SizeBytes * 8;
         bool allowOverlap   = model.AllowOverlap && model.Mode != StorageMode.Expanded;
 
         var spans = BuildSpans(model, allowOverlap);
@@ -64,7 +64,7 @@ internal static class LayoutValidator
             diagnostics.Add(new DiagnosticInfo(
                 Diagnostics.Kata003_InvalidSize,
                 null,
-                model.ComputedSizeBytes
+                model.SizeBytes
             ));
         }
 
@@ -167,10 +167,10 @@ internal static class LayoutValidator
     private static bool HasInvalidStorageSize(BitLayoutModel model)
     {
         if (model.Mode is StorageMode.Expanded or StorageMode.Register)
-            return model.ComputedSizeBytes > 8;
+            return model.SizeBytes > 8;
 
         if (model.Mode == StorageMode.Blob)
-            return model.ComputedSizeBytes <= 8;
+            return model.SizeBytes <= 8;
 
         return false;
     }

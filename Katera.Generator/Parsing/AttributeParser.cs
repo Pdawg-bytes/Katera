@@ -41,7 +41,7 @@ internal static class AttributeParser
             return ParseResult<BitLayoutModel>.Failure(diagnostics.ToArray());
         }
 
-        int size          = 0;
+        int sizeBits      = 0;
         StorageMode mode  = StorageMode.Auto;
         bool allowOverlap = false;
         BitOrder bitOrder = BitOrder.LSBFirst;
@@ -56,7 +56,7 @@ internal static class AttributeParser
             {
                 switch (arg.Key)
                 {
-                    case "Size":         size         = (int)arg.Value.Value!; break;
+                    case "Size":         sizeBits     = (int)arg.Value.Value!; break;
                     case "Mode":         mode         = (StorageMode)(int)arg.Value.Value!; break;
                     case "AllowOverlap": allowOverlap = (bool)arg.Value.Value!; break;
                     case "BitOrder":     bitOrder     = (BitOrder)(int)arg.Value.Value!; break;
@@ -104,20 +104,19 @@ internal static class AttributeParser
 
         var items = itemsBuilder.ToImmutable();
         
-        var (resolvedItems, computedSize) = ResolveOffsets(items, size);
+        var (resolvedItems, sizeBytes) = ResolveOffsets(items, sizeBits);
 
         BitLayoutModel model = new
         (
             TypeName:          symbol.Name,
             Namespace:         symbol.ContainingNamespace.ToDisplayString(),
             TypeAccessibility: symbol.DeclaredAccessibility,
-            SizeBytes:         size,
+            SizeBytes:         sizeBytes,
             Mode:              mode,
             AllowOverlap:      allowOverlap,
             BitOrder:          bitOrder,
             Items:             resolvedItems,
-            BitFieldStubs:     bitFieldStubs.ToImmutable(),
-            ComputedSizeBytes: computedSize
+            BitFieldStubs:     bitFieldStubs.ToImmutable()
         );
 
         return diagnostics.Count > 0
@@ -215,8 +214,8 @@ internal static class AttributeParser
         return true;
     }
 
-    private static (ImmutableArray<LayoutItem> Items, int ComputedSize) ResolveOffsets(
-        ImmutableArray<LayoutItem> items, int declaredSize)
+    private static (ImmutableArray<LayoutItem> Items, int SizeBytes) ResolveOffsets(
+        ImmutableArray<LayoutItem> items, int declaredSizeBits)
     {
         var resolvedBuilder = ImmutableArray.CreateBuilder<LayoutItem>(items.Length);
         int cursor          = 0;
@@ -247,8 +246,8 @@ internal static class AttributeParser
             }
         }
 
-        int computedSize = declaredSize == 0 ? (cursor + 7) / 8 : declaredSize;
-        return (resolvedBuilder.ToImmutable(), computedSize);
+        int sizeBytes = declaredSizeBits == 0 ? (cursor + 7) / 8 : (declaredSizeBits + 7) / 8;
+        return (resolvedBuilder.ToImmutable(), sizeBytes);
     }
 
 

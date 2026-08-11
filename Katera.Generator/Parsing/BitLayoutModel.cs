@@ -22,8 +22,7 @@ internal record BitLayoutModel
     bool AllowOverlap,
     BitOrder BitOrder,
     ImmutableArray<LayoutItem> Items,
-    ImmutableArray<BitFieldStub> BitFieldStubs,
-    int ComputedSizeBytes
+    ImmutableArray<BitFieldStub> BitFieldStubs
 );
 
 internal abstract record LayoutItem;

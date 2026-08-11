@@ -7,7 +7,7 @@ internal static class LayoutLowerer
 {
     internal static LoweredLayout Lower(BitLayoutModel model)
     {
-        var size = model.ComputedSizeBytes;
+        var size = model.SizeBytes;
 
         var ownedKind = model.Mode switch
         {
