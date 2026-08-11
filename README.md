@@ -4,7 +4,7 @@ Katera is a source generator for deterministic bitfield layouts in C#. Its goal 
 All bitfield layouts support LSB-first and MSB-first ordering, explicit padding, overlapping fields, and memory-backed overlays for interpreting raw bytes.
 
 ## Features
-- Partial `struct` source generation for compact bit layouts
+- Partial `struct`/`record struct` source generation for compact bit layouts
 - Support for `bool`, integer types, and enums as bit fields
 - Explicit layout control with `Size`, `Mode`, `AllowOverlap`, `BitOrder`, and `Offset`
 - Automatic layout size inference when `Size` is omitted
@@ -32,7 +32,7 @@ public partial struct PacketHeader
 Katera will generate the backing storage and property accessors so you can treat `PacketHeader` like a compact value type.
 
 ## BitLayoutAttribute
-Apply `BitLayoutAttribute` to a `partial struct` to configure the layout.
+Apply `BitLayoutAttribute` to a `partial struct`/`parital record struct` to configure the layout.
 
 Properties:
 - `Size` (bits): total layout size. `0` (default) means automatically compute size from fields.
@@ -146,7 +146,7 @@ public partial struct WideLayout
 ```
 
 ## Overlapping fields
-Set `AllowOverlap = true` to permit overlapping fields. Overlap is not allowed by default.
+Set `AllowOverlap = true` to permit overlapping fields. Overlap is not allowed by default, and the option is only honored for register-backed and blob-backed layouts. Expanded layouts still enforce non-overlapping rules.
 
 ```csharp
 [BitLayout(AllowOverlap = true)]
@@ -161,7 +161,7 @@ public partial struct OverlapLayout
 ```
 
 ## Overlay views
-For blob-backed layouts, Katera can generate an overlay view type named `{TypeName}View`.
+Katera generates an overlay view type named `{TypeName}View` for a given layout.
 
 ```csharp
 [BitLayout(Mode = StorageMode.Blob)]
