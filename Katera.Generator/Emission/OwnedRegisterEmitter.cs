@@ -121,7 +121,7 @@ internal static class OwnedRegisterEmitter
     {
         string typeName           = field.TypeDisplayName;
         string signedIntermediate = GetSignedIntermediateType(backingType);
-        int shiftAmount           = backingWidth - field.Length;
+        int shiftAmount           = signedIntermediate == "long" ? 64 - field.Length : 32 - field.Length;
 
         sb.OpenBlock("get");
         sb.Line($"{backingType} raw = ({backingType})((_value >> {shift}) & (({backingType}){maskLiteral}));");

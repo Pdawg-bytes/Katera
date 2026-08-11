@@ -1,16 +1,16 @@
 # Katera
 Katera is a source generator for deterministic bitfield layouts in C#. Its goal is to add support for bitfield-style structs without inheriting the undefined or host-dependent behavior of C/C++ bitfields. This also means that no implicit alignment happens, all alignment must be added manually.
 
-All bitfield layouts support LSB-first and MSB-first ordering, explicit padding, overlapping fields, and memory-backed overlays for interpreting raw bytes.
+All bitfield layouts support LSB-first and MSB-first ordering, explicit padding, and memory-backed overlays for interpreting raw bytes.
 
 ## Features
 - Partial `struct`/`record struct` source generation for compact bit layouts
 - Support for `bool`, integer types, and enums as bit fields
 - Explicit layout control with `Size`, `Mode`, `AllowOverlap`, `BitOrder`, and `Offset`
 - Automatic layout size inference when `Size` is omitted
-- Padding with `PadAttribute`
+- Explicit member-level padding with `PadAttribute`
 - Support for get-only and init-only bit properties
-- Blob-backed and register-backed storage modes with optional overlay views
+- Blob-backed, register-backed, and expanded storage modes with optional overlay views
 - Analyzer diagnostics for invalid field usage, size mismatches, overlaps, and gaps
 
 ## Usage
@@ -32,7 +32,7 @@ public partial struct PacketHeader
 Katera will generate the backing storage and property accessors so you can treat `PacketHeader` like a compact value type.
 
 ## BitLayoutAttribute
-Apply `BitLayoutAttribute` to a `partial struct`/`parital record struct` to configure the layout.
+Apply `BitLayoutAttribute` to a `partial struct`/`partial record struct` to configure the layout.
 
 Properties:
 - `Size` (bits): total layout size. `0` (default) means automatically compute size from fields.
@@ -87,7 +87,7 @@ public partial struct ExplicitOffsets
   - Uses separate generated fields and properties without unified backing storage
   
 ## Padding
-Use `PadAttribute` to reserve unnamed bits between fields.
+Use `PadAttribute` on a field or property declaration to reserve unnamed bits between fields.
 
 ```csharp
 [BitLayout]
@@ -100,6 +100,8 @@ public partial struct PaddedLayout
 ```
 
 This is useful when you want explicit gaps or alignment without creating a named field. If gaps are created implicitly via `Offset`, the analyzer will emit a `KATERA006` warning, so it is recommended to use this attribute.
+
+`PadAttribute` is currently consumed from members in declaration order. Although the attribute type allows broader targets, generator layout padding is defined by member-level usage.
 
 ## Read-only and init-only properties
 Katera supports read-only bit fields and `init`-only bit fields.
@@ -133,6 +135,24 @@ public partial struct EnumLayout
 
 `bool` fields are stored as a single bit and will not allow larger sizes.
 
+## Signed fields
+Signed integral fields are masked to the declared bit width and sign-extended on read. In practice, that means a signed field behaves like a fixed-width two's-complement value inside the declared bit range.
+
+For example, a 4-bit `sbyte` field stores values in the range `-8` to `7`. Writing a value outside the representable range truncates to the low bits before later reads sign-extend that stored pattern.
+
+```csharp
+[BitLayout]
+public partial struct SignedNibble
+{
+    [BitField(4)] public partial sbyte Delta { get; set; }
+}
+
+SignedNibble value = new();
+value.Delta = -2;
+
+Console.WriteLine(value.Delta); // -2
+```
+
 ## Straddling fields
 Fields may cross underlying storage boundaries in blob-backed layouts. Katera handles reads and writes across 64-bit boundaries automatically.
 
@@ -146,7 +166,7 @@ public partial struct WideLayout
 ```
 
 ## Overlapping fields
-Set `AllowOverlap = true` to permit overlapping fields. Overlap is not allowed by default, and the option is only honored for register-backed and blob-backed layouts. Expanded layouts still enforce non-overlapping rules.
+Set `AllowOverlap = true` to permit overlapping fields. Overlap is not allowed by default, and the option is only honored for register-backed and blob-backed layouts. **Note:** Expanded layouts do not support overlapping fields regardless of setting.
 
 ```csharp
 [BitLayout(AllowOverlap = true)]
@@ -182,7 +202,7 @@ Overlay helpers require a buffer that contains at least the full layout size in 
 Use overlays when you need to interpret or mutate a raw byte buffer without copying the entire bitfield struct.
 
 ## Reading and writing raw bytes
-Generated types offer helpers for raw byte conversion.
+Register-backed and blob-backed generated types offer helpers for raw byte conversion.
 
 Raw helpers such as `From(ReadOnlySpan<byte>)`, `TryFrom(ReadOnlySpan<byte>, out T)`, and `WriteTo(Span<byte>)` all require a buffer at least as large as the layout's full backing size in bytes. That is:
 - the declared `Size` in bits, rounded up to the nearest whole byte
@@ -190,6 +210,8 @@ Raw helpers such as `From(ReadOnlySpan<byte>)`, `TryFrom(ReadOnlySpan<byte>, out
 
 For `Register`-backed layouts, this is the same size as the generated backing primitive (`byte`, `ushort`, `uint`, or `ulong`). `Register` mode also generates raw backing helpers like `SetRaw(...)` and implicit/explicit conversions to the primitive backing type.
 For `Blob`-backed layouts, this is the full number of bytes covered by the generated blob storage.
+
+`StorageMode.Expanded` does not generate `From(...)`, `TryFrom(...)`, or `WriteTo(...)`. Instead, it emits internal raw helpers for the expanded representation and still generates the overlay view type.
 
 Example:
 
@@ -237,9 +259,11 @@ KATERA005 | Katera.BitLayout | Error | Overlapping fields without overlap allowa
 KATERA006 | Katera.BitLayout | Warning | Implicit gap, use Pad to make it explicit.
 KATERA007 | Katera.BitLayout | Error | BitField length must be greater than zero.
 
+When overlaps occur without `AllowOverlap = true`, `KATERA005` is currently reported once per overlapping bit position.
+
 ## Notes
 - `BitLayoutAttribute` must be applied to a `partial struct` or `partial record struct`.
 - Bit field properties must be instance properties and must be `partial`.
-- `PadAttribute` may be applied to structs, fields, or properties.
+- `PadAttribute` layout padding is defined by member-level usage.
 - Explicit offsets and `Pad` may be used together to control layout precisely.
 - `Size` is in bits; if omitted, Katera computes the smallest byte size necessary for the declared fields.

@@ -145,7 +145,7 @@ internal static class OverlayEmitter
     private static void EmitOverlaySignedGetter(SourceBuilder sb, LoweredLayout plan, BitFieldItem field, string backingType, int shift, string maskLiteral)
     {
         string signedIntermediate = GetSignedIntermediateType(backingType);
-        int shiftAmount           = (int)plan.Numeric! - field.Length;
+        int shiftAmount           = signedIntermediate == "long" ? 64 - field.Length : 32 - field.Length;
 
         sb.OpenBlock("get");
         EmitReadBacking(sb, plan, "rawValue");

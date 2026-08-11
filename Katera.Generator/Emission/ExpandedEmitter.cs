@@ -79,7 +79,7 @@ internal static class ExpandedEmitter
         int shiftAmount           = GetSignExtensionShiftAmount(signedIntermediate, field.Length);
 
         sb.OpenBlock("get");
-        sb.Line($"{backingType} raw = ({backingType}){backingFieldName} & {maskLiteral};");
+        sb.Line($"{backingType} raw = ({backingType})((({backingType}){backingFieldName}) & ({backingType}){maskLiteral});");
         sb.Line($"return ({field.TypeDisplayName})(({signedIntermediate})(raw << {shiftAmount}) >> {shiftAmount});");
         sb.CloseBlock();
     }
