@@ -28,7 +28,8 @@ public sealed class KateraGenerator : IIncrementalGenerator
             {
                 var model      = r.Value!;
                 var validation = LayoutValidator.Validate(model);
-                bool hasErrors = !r.Diagnostics.IsEmpty || !validation.IsValid;
+                bool hasErrors = r.Diagnostics.Any(static d => d.Descriptor.DefaultSeverity == DiagnosticSeverity.Error)
+                              || validation.Diagnostics.Any(static d => d.Descriptor.DefaultSeverity == DiagnosticSeverity.Error);
 
                 return (Model: model, ParseDiagnostics: r.Diagnostics, Validation: validation, HasErrors: hasErrors);
             });

@@ -33,7 +33,8 @@ internal static class LayoutValidator
                 ));
             }
 
-            expectedEnd = end;
+            if (end > expectedEnd)
+                expectedEnd = end;
         }
 
         // KATA001
@@ -140,7 +141,7 @@ internal static class LayoutValidator
 
                     spansBuilder.Add(new LayoutSpan(field, start, end));
 
-                    if (!allowOverlap)
+                    if (end > cursor)
                         cursor = end;
 
                     break;
@@ -152,9 +153,7 @@ internal static class LayoutValidator
                     int end   = start + pad.Bits;
 
                     spansBuilder.Add(new LayoutSpan(null, start, end));
-
-                    if (!allowOverlap)
-                        cursor = end;
+                    cursor = end;
 
                     break;
                 }
