@@ -8,11 +8,11 @@ namespace Katera.Generator.Emission;
 
 internal static class Common
 {
-    internal static void EmitOwnedHeader(LoweredLayout plan, SourceBuilder sb) =>
-        sb.OpenBlock($"{GetAccessibility(plan.Accessibility)} partial {GetOwnedTypeKeyword(plan)} {plan.TypeName}");
+    internal static void EmitOwnedHeader(LoweredLayout layout, SourceBuilder sb) =>
+        sb.OpenBlock($"{GetAccessibility(layout.Accessibility)} partial {GetOwnedTypeKeyword(layout)} {layout.TypeName}");
 
-    private static string GetOwnedTypeKeyword(LoweredLayout plan)
-        => plan.IsRecordStruct ? "record struct" : "struct";
+    private static string GetOwnedTypeKeyword(LoweredLayout layout)
+        => layout.IsRecordStruct ? "record struct" : "struct";
 
     internal static string GetMaskLiteral(int bitWidth)
     {
@@ -57,20 +57,20 @@ internal static class Common
         };
     }
 
-    internal static int ComputeShift(LoweredLayout plan, BitFieldItem field)
+    internal static int ComputeShift(LoweredLayout layout, BitFieldItem field)
     {
-        int totalBits = plan.SizeBytes * 8;
-        return plan.BitOrder == BitOrder.LSBFirst
+        int totalBits = layout.SizeBytes * 8;
+        return layout.BitOrder == BitOrder.LSBFirst
             ? field.Offset
             : totalBits - field.Offset - field.Length;
     }
 
-    internal static string BuildReadUInt64Expression(LoweredLayout plan, string spanExpr, int offset)
+    internal static string BuildReadUInt64Expression(LoweredLayout layout, string spanExpr, int offset)
     {
-        int remainingBytes = plan.SizeBytes - offset;
+        int remainingBytes = layout.SizeBytes - offset;
 
         if (remainingBytes >= 8)
-            return $"BinaryPrimitives.ReadUInt64{BitOrderToEndianness(plan.BitOrder)}({spanExpr}.Slice({offset}))";
+            return $"BinaryPrimitives.ReadUInt64{BitOrderToEndianness(layout.BitOrder)}({spanExpr}.Slice({offset}))";
 
         var expression = new StringBuilder();
 
@@ -79,7 +79,7 @@ internal static class Common
             if (b > 0)
                 expression.Append(" | ");
 
-            if (plan.BitOrder == BitOrder.LSBFirst)
+            if (layout.BitOrder == BitOrder.LSBFirst)
                 expression.Append($"((ulong){spanExpr}[{offset + b}] << {b * 8})");
             else
                 expression.Append($"((ulong){spanExpr}[{offset + b}] << {(remainingBytes - 1 - b) * 8})");
@@ -88,22 +88,22 @@ internal static class Common
         return expression.Length == 0 ? "0" : expression.ToString();
     }
 
-    internal static void EmitReadUInt64IntoVariable(SourceBuilder sb, LoweredLayout plan, string spanExpr, int offset, string variableName)
-        => sb.Line($"ulong {variableName} = {BuildReadUInt64Expression(plan, spanExpr, offset)};");
+    internal static void EmitReadUInt64IntoVariable(SourceBuilder sb, LoweredLayout layout, string spanExpr, int offset, string variableName)
+        => sb.Line($"ulong {variableName} = {BuildReadUInt64Expression(layout, spanExpr, offset)};");
 
-    internal static void EmitWriteUInt64FromVariable(SourceBuilder sb, LoweredLayout plan, string spanExpr, int offset, string valueExpr)
+    internal static void EmitWriteUInt64FromVariable(SourceBuilder sb, LoweredLayout layout, string spanExpr, int offset, string valueExpr)
     {
-        int remainingBytes = plan.SizeBytes - offset;
+        int remainingBytes = layout.SizeBytes - offset;
 
         if (remainingBytes >= 8)
         {
-            sb.Line($"BinaryPrimitives.WriteUInt64{BitOrderToEndianness(plan.BitOrder)}({spanExpr}.Slice({offset}), {valueExpr});");
+            sb.Line($"BinaryPrimitives.WriteUInt64{BitOrderToEndianness(layout.BitOrder)}({spanExpr}.Slice({offset}), {valueExpr});");
             return;
         }
 
         for (int b = 0; b < remainingBytes; b++)
         {
-            if (plan.BitOrder == BitOrder.LSBFirst)
+            if (layout.BitOrder == BitOrder.LSBFirst)
                 sb.Line($"{spanExpr}[{offset + b}] = (byte)({valueExpr} >> {b * 8});");
             else
                 sb.Line($"{spanExpr}[{offset + b}] = (byte)({valueExpr} >> {(remainingBytes - 1 - b) * 8});");

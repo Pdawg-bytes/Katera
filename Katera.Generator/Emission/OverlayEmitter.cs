@@ -9,45 +9,45 @@ namespace Katera.Generator.Emission;
 
 internal static class OverlayEmitter
 {
-    internal static void EmitOverlay(LoweredLayout plan, SourceBuilder sb)
+    internal static void EmitOverlay(LoweredLayout layout, SourceBuilder sb)
     {
-        string overlayName   = $"{plan.TypeName}View";
-        string accessibility = GetAccessibility(plan.Accessibility);
+        string overlayName   = $"{layout.TypeName}View";
+        string accessibility = GetAccessibility(layout.Accessibility);
 
         sb.OpenBlock($"{accessibility} ref struct {overlayName}(Span<byte> span)");
 
         sb.Line("private Span<byte> _span = span;");
         sb.Line();
 
-        foreach (var field in plan.Fields)
-            EmitOverlayProperty(plan, field, sb);
+        foreach (var field in layout.Fields)
+            EmitOverlayProperty(layout, field, sb);
 
         sb.Line();
-        EmitOverMethods(plan, overlayName, accessibility, sb);
+        EmitOverMethods(layout, overlayName, accessibility, sb);
         sb.Line($"{accessibility} readonly Span<byte> AsSpan() => _span;");
 
         sb.CloseBlock();
     }
 
 
-    private static void EmitOverlayProperty(LoweredLayout plan, BitFieldItem field, SourceBuilder sb)
+    private static void EmitOverlayProperty(LoweredLayout layout, BitFieldItem field, SourceBuilder sb)
     {
-        int shift            = ComputeShift(plan, field);
+        int shift            = ComputeShift(layout, field);
         string accessibility = GetAccessibility(field.Accessor.Accessibility);
         string typeName      = field.TypeDisplayName;
 
-        if (plan.OwnedKind == OwnedKind.Blob)
+        if (layout.OwnedKind == OwnedKind.Blob)
         {
-            EmitBlobOverlayProperty(plan, field, shift, accessibility, typeName, sb);
+            EmitBlobOverlayProperty(layout, field, shift, accessibility, typeName, sb);
             return;
         }
 
         string maskLiteral = GetMaskLiteral(field.Length);
 
-        string backingType = plan.Numeric!.ToString().ToLowerInvariant();
+        string backingType = layout.Numeric!.ToString().ToLowerInvariant();
 
-        var getter = SelectOverlayGetter(plan, field, backingType, shift, maskLiteral);
-        var setter = SelectOverlaySetter(plan, field, backingType, shift, maskLiteral);
+        var getter = SelectOverlayGetter(layout, field, backingType, shift, maskLiteral);
+        var setter = SelectOverlaySetter(layout, field, backingType, shift, maskLiteral);
 
         sb.OpenBlock($"{accessibility} {typeName} {field.Name}");
         getter(sb);
@@ -56,23 +56,23 @@ internal static class OverlayEmitter
         sb.Line();
     }
 
-    private static Action<SourceBuilder> SelectOverlayGetter(LoweredLayout plan, BitFieldItem field, string backingType, int shift, string maskLiteral)
+    private static Action<SourceBuilder> SelectOverlayGetter(LoweredLayout layout, BitFieldItem field, string backingType, int shift, string maskLiteral)
     {
         if (field.TypeDisplayName == "bool")
-            return sb => EmitOverlayBoolGetter(sb, plan, shift);
+            return sb => EmitOverlayBoolGetter(sb, layout, shift);
 
-        bool isFullWidth = field.Offset == 0 && field.Length == (int)plan.Numeric! * 8;
+        bool isFullWidth = field.Offset == 0 && field.Length == (int)layout.Numeric! * 8;
 
         if (isFullWidth)
-            return sb => EmitOverlayFullWidthGetter(sb, plan, field);
+            return sb => EmitOverlayFullWidthGetter(sb, layout, field);
 
         if (!field.IsSigned || field.BackingWidth == field.Length)
-            return sb => EmitOverlayUnsignedGetter(sb, plan, field, backingType, shift, maskLiteral);
+            return sb => EmitOverlayUnsignedGetter(sb, layout, field, backingType, shift, maskLiteral);
 
-        return sb => EmitOverlaySignedGetter(sb, plan, field, backingType, shift, maskLiteral);
+        return sb => EmitOverlaySignedGetter(sb, layout, field, backingType, shift, maskLiteral);
     }
 
-    private static Action<SourceBuilder>? SelectOverlaySetter(LoweredLayout plan, BitFieldItem field, string backingType, int shift, string maskLiteral)
+    private static Action<SourceBuilder>? SelectOverlaySetter(LoweredLayout layout, BitFieldItem field, string backingType, int shift, string maskLiteral)
     {
         if (field.Accessor.AccessorKind == AccessorKind.GetOnly)
             return null;
@@ -80,22 +80,22 @@ internal static class OverlayEmitter
         string accessor = field.Accessor.AccessorKind == AccessorKind.GetSet ? "set" : "init";
 
         if (field.TypeDisplayName == "bool")
-            return sb => EmitOverlayBoolSetter(sb, plan, shift, accessor);
+            return sb => EmitOverlayBoolSetter(sb, layout, shift, accessor);
 
-        bool isFullWidth = field.Offset == 0 && field.Length == (int)plan.Numeric! * 8;
+        bool isFullWidth = field.Offset == 0 && field.Length == (int)layout.Numeric! * 8;
 
         if (isFullWidth)
-            return sb => EmitOverlayFullWidthSetter(sb, plan, field, accessor);
+            return sb => EmitOverlayFullWidthSetter(sb, layout, field, accessor);
 
-        return sb => EmitOverlayGeneralSetter(sb, plan, field, backingType, shift, maskLiteral, accessor);
+        return sb => EmitOverlayGeneralSetter(sb, layout, field, backingType, shift, maskLiteral, accessor);
     }
 
 
-    private static void EmitReadBacking(SourceBuilder sb, LoweredLayout plan, string varName)
+    private static void EmitReadBacking(SourceBuilder sb, LoweredLayout layout, string varName)
     {
-        string numericType = plan.Numeric!.ToString().ToLowerInvariant();
+        string numericType = layout.Numeric!.ToString().ToLowerInvariant();
 
-        if (plan.Numeric == NumericKind.Byte)
+        if (layout.Numeric == NumericKind.Byte)
         {
             sb.Line($"{numericType} {varName} = _span[0];");
             return;
@@ -103,67 +103,67 @@ internal static class OverlayEmitter
 
         sb.Line($"{numericType} {varName} = Unsafe.ReadUnaligned<{numericType}>(ref MemoryMarshal.GetReference(_span));");
 
-        if (plan.BitOrder == BitOrder.MSBFirst)
+        if (layout.BitOrder == BitOrder.MSBFirst)
             sb.Line($"if (BitConverter.IsLittleEndian) {varName} = BinaryPrimitives.ReverseEndianness({varName});");
         else
             sb.Line($"if (!BitConverter.IsLittleEndian) {varName} = BinaryPrimitives.ReverseEndianness({varName});");
     }
 
-    private static void EmitOverlayBoolGetter(SourceBuilder sb, LoweredLayout plan, int shift)
+    private static void EmitOverlayBoolGetter(SourceBuilder sb, LoweredLayout layout, int shift)
     {
         sb.OpenBlock("get");
-        EmitReadBacking(sb, plan, "raw");
+        EmitReadBacking(sb, layout, "raw");
         sb.Line($"return ((raw >> {shift}) & 1) != 0;");
         sb.CloseBlock();
     }
 
-    private static void EmitOverlayFullWidthGetter(SourceBuilder sb, LoweredLayout plan, BitFieldItem field)
+    private static void EmitOverlayFullWidthGetter(SourceBuilder sb, LoweredLayout layout, BitFieldItem field)
     {
         sb.OpenBlock("get");
 
-        if (plan.Numeric == NumericKind.Byte)
+        if (layout.Numeric == NumericKind.Byte)
         {
             sb.Line($"return ({field.TypeDisplayName})_span[0];");
         }
         else
         {
-            EmitReadBacking(sb, plan, "raw");
+            EmitReadBacking(sb, layout, "raw");
             sb.Line($"return ({field.TypeDisplayName})raw;");
         }
 
         sb.CloseBlock();
     }
 
-    private static void EmitOverlayUnsignedGetter(SourceBuilder sb, LoweredLayout plan, BitFieldItem field, string backingType, int shift, string maskLiteral)
+    private static void EmitOverlayUnsignedGetter(SourceBuilder sb, LoweredLayout layout, BitFieldItem field, string backingType, int shift, string maskLiteral)
     {
         sb.OpenBlock("get");
-        EmitReadBacking(sb, plan, "raw");
+        EmitReadBacking(sb, layout, "raw");
         sb.Line($"return ({field.TypeDisplayName})((({backingType})((raw >> {shift}) & (({backingType}){maskLiteral}))));");
         sb.CloseBlock();
     }
 
-    private static void EmitOverlaySignedGetter(SourceBuilder sb, LoweredLayout plan, BitFieldItem field, string backingType, int shift, string maskLiteral)
+    private static void EmitOverlaySignedGetter(SourceBuilder sb, LoweredLayout layout, BitFieldItem field, string backingType, int shift, string maskLiteral)
     {
         string signedIntermediate = GetSignedIntermediateType(backingType);
         int shiftAmount           = signedIntermediate == "long" ? 64 - field.Length : 32 - field.Length;
 
         sb.OpenBlock("get");
-        EmitReadBacking(sb, plan, "rawValue");
+        EmitReadBacking(sb, layout, "rawValue");
         sb.Line($"{backingType} raw = ({backingType})((rawValue >> {shift}) & (({backingType}){maskLiteral}));");
         sb.Line($"return ({field.TypeDisplayName})(({signedIntermediate})(raw << {shiftAmount}) >> {shiftAmount});");
         sb.CloseBlock();
     }
 
 
-    private static void EmitWriteBacking(SourceBuilder sb, LoweredLayout plan, string varName)
+    private static void EmitWriteBacking(SourceBuilder sb, LoweredLayout layout, string varName)
     {
-        if (plan.Numeric == NumericKind.Byte)
+        if (layout.Numeric == NumericKind.Byte)
         {
             sb.Line($"_span[0] = {varName};");
             return;
         }
 
-        if (plan.BitOrder == BitOrder.MSBFirst)
+        if (layout.BitOrder == BitOrder.MSBFirst)
             sb.Line($"if (BitConverter.IsLittleEndian) {varName} = BinaryPrimitives.ReverseEndianness({varName});");
         else
             sb.Line($"if (!BitConverter.IsLittleEndian) {varName} = BinaryPrimitives.ReverseEndianness({varName});");
@@ -171,64 +171,64 @@ internal static class OverlayEmitter
         sb.Line($"Unsafe.WriteUnaligned(ref MemoryMarshal.GetReference(_span), {varName});");
     }
 
-    private static void EmitOverlayBoolSetter(SourceBuilder sb, LoweredLayout plan, int shift, string accessor)
+    private static void EmitOverlayBoolSetter(SourceBuilder sb, LoweredLayout layout, int shift, string accessor)
     {
-        string backingTypeLower = plan.Numeric!.ToString().ToLowerInvariant();
+        string backingTypeLower = layout.Numeric!.ToString().ToLowerInvariant();
 
         sb.OpenBlock(accessor);
-        EmitReadBacking(sb, plan, "raw");
+        EmitReadBacking(sb, layout, "raw");
         sb.Line($"raw = ({backingTypeLower})((raw & ~(({backingTypeLower})1 << {shift})) | (value ? (({backingTypeLower})1 << {shift}) : ({backingTypeLower})0));");
-        EmitWriteBacking(sb, plan, "raw");
+        EmitWriteBacking(sb, layout, "raw");
         sb.CloseBlock();
     }
 
-    private static void EmitOverlayFullWidthSetter(SourceBuilder sb, LoweredLayout plan, BitFieldItem field, string accessor)
+    private static void EmitOverlayFullWidthSetter(SourceBuilder sb, LoweredLayout layout, BitFieldItem field, string accessor)
     {
-        string backingTypeLower = plan.Numeric!.ToString().ToLowerInvariant();
+        string backingTypeLower = layout.Numeric!.ToString().ToLowerInvariant();
 
         sb.OpenBlock(accessor);
 
-        if (plan.Numeric == NumericKind.Byte)
+        if (layout.Numeric == NumericKind.Byte)
         {
             sb.Line($"_span[0] = ({backingTypeLower})value;");
         }
         else
         {
             sb.Line($"{backingTypeLower} raw = ({backingTypeLower})value;");
-            EmitWriteBacking(sb, plan, "raw");
+            EmitWriteBacking(sb, layout, "raw");
         }
 
         sb.CloseBlock();
     }
 
-    private static void EmitOverlayGeneralSetter(SourceBuilder sb, LoweredLayout plan, BitFieldItem field, string backingType, int shift, string maskLiteral, string accessor)
+    private static void EmitOverlayGeneralSetter(SourceBuilder sb, LoweredLayout layout, BitFieldItem field, string backingType, int shift, string maskLiteral, string accessor)
     {
         sb.OpenBlock(accessor);
-        EmitReadBacking(sb, plan, "raw");
+        EmitReadBacking(sb, layout, "raw");
         sb.Line($"raw = ({backingType})((raw & ~((({backingType}){maskLiteral}) << {shift})) | ((((({backingType})value) & ({backingType}){maskLiteral}) << {shift})));");
-        EmitWriteBacking(sb, plan, "raw");
+        EmitWriteBacking(sb, layout, "raw");
         sb.CloseBlock();
     }
 
 
-    private static void EmitOverMethods(LoweredLayout plan, string overlayName, string accessibility, SourceBuilder sb)
+    private static void EmitOverMethods(LoweredLayout layout, string overlayName, string accessibility, SourceBuilder sb)
     {
         sb.OpenBlock($"{accessibility} static {overlayName} Over(Span<byte> span)");
-        sb.Line($"if (span.Length < {plan.SizeBytes})");
+        sb.Line($"if (span.Length < {layout.SizeBytes})");
         sb.Write("    throw new System.ArgumentException(\"Span too small.\", nameof(span));\r\n", indent: true);
         sb.Line();
-        sb.Line($"return new {overlayName}(span.Slice(0, {plan.SizeBytes}));");
+        sb.Line($"return new {overlayName}(span.Slice(0, {layout.SizeBytes}));");
         sb.CloseBlock();
         sb.Line();
 
         sb.OpenBlock($"{accessibility} static {overlayName} Over(ref byte reference)");
-        sb.Line($"Span<byte> span = MemoryMarshal.CreateSpan(ref reference, {plan.SizeBytes});");
+        sb.Line($"Span<byte> span = MemoryMarshal.CreateSpan(ref reference, {layout.SizeBytes});");
         sb.Line($"return new {overlayName}(span);");
         sb.CloseBlock();
         sb.Line();
     }
 
-    private static void EmitBlobOverlayProperty(LoweredLayout plan, BitFieldItem field, int shift, string accessibility, string typeName, SourceBuilder sb)
+    private static void EmitBlobOverlayProperty(LoweredLayout layout, BitFieldItem field, int shift, string accessibility, string typeName, SourceBuilder sb)
     {
         int ulongIndex         = shift / 64;
         int bitOffsetInULong   = shift % 64;
@@ -239,30 +239,30 @@ internal static class OverlayEmitter
         sb.OpenBlock($"{accessibility} {typeName} {field.Name}");
 
         if (straddlesBoundary)
-            EmitBlobOverlayStraddlingGetter(sb, plan, field, ulongIndex, bitOffsetInULong, maskLiteralUL);
+            EmitBlobOverlayStraddlingGetter(sb, layout, field, ulongIndex, bitOffsetInULong, maskLiteralUL);
         else
-            EmitBlobOverlaySimpleGetter(sb, plan, field, ulongIndex, bitOffsetInULong, maskLiteralUL);
+            EmitBlobOverlaySimpleGetter(sb, layout, field, ulongIndex, bitOffsetInULong, maskLiteralUL);
 
         if (field.Accessor.AccessorKind != AccessorKind.GetOnly)
         {
             string accessor = field.Accessor.AccessorKind == AccessorKind.GetSet ? "set" : "init";
             
             if (straddlesBoundary)
-                EmitBlobOverlayStraddlingSetter(sb, plan, field, ulongIndex, bitOffsetInULong, maskLiteralUL, accessor);
+                EmitBlobOverlayStraddlingSetter(sb, layout, field, ulongIndex, bitOffsetInULong, maskLiteralUL, accessor);
             else
-                EmitBlobOverlaySimpleSetter(sb, plan, field, ulongIndex, bitOffsetInULong, maskLiteralUL, accessor);
+                EmitBlobOverlaySimpleSetter(sb, layout, field, ulongIndex, bitOffsetInULong, maskLiteralUL, accessor);
         }
 
         sb.CloseBlock();
         sb.Line();
     }
 
-    private static void EmitBlobOverlaySimpleGetter(SourceBuilder sb, LoweredLayout plan, BitFieldItem field, int ulongIndex, int bitOffsetInULong, string maskLiteral)
+    private static void EmitBlobOverlaySimpleGetter(SourceBuilder sb, LoweredLayout layout, BitFieldItem field, int ulongIndex, int bitOffsetInULong, string maskLiteral)
     {
         int offset = ulongIndex * 8;
 
         sb.OpenBlock("get");
-        EmitReadUInt64IntoVariable(sb, plan, "_span", offset, "data");
+        EmitReadUInt64IntoVariable(sb, layout, "_span", offset, "data");
         
         if (field.TypeDisplayName == "bool")
         {
@@ -287,12 +287,12 @@ internal static class OverlayEmitter
         sb.CloseBlock();
     }
 
-    private static void EmitBlobOverlaySimpleSetter(SourceBuilder sb, LoweredLayout plan, BitFieldItem field, int ulongIndex, int bitOffsetInULong, string maskLiteral, string accessor)
+    private static void EmitBlobOverlaySimpleSetter(SourceBuilder sb, LoweredLayout layout, BitFieldItem field, int ulongIndex, int bitOffsetInULong, string maskLiteral, string accessor)
     {
         int offset = ulongIndex * 8;
 
         sb.OpenBlock(accessor);
-        EmitReadUInt64IntoVariable(sb, plan, "_span", offset, "data");
+        EmitReadUInt64IntoVariable(sb, layout, "_span", offset, "data");
         
         if (field.TypeDisplayName == "bool")
             sb.Line($"data = (data & ~((ulong)1 << {bitOffsetInULong})) | (value ? ((ulong)1 << {bitOffsetInULong}) : 0);");
@@ -300,24 +300,24 @@ internal static class OverlayEmitter
             sb.Line($"data = (ulong)value;");
         else
             sb.Line($"data = (data & ~(({maskLiteral}) << {bitOffsetInULong})) | ((((ulong)value) & {maskLiteral}) << {bitOffsetInULong});");
-        EmitWriteUInt64FromVariable(sb, plan, "_span", offset, "data");
+        EmitWriteUInt64FromVariable(sb, layout, "_span", offset, "data");
         
         sb.CloseBlock();
     }
 
-    private static void EmitBlobOverlayStraddlingGetter(SourceBuilder sb, LoweredLayout plan, BitFieldItem field, int ulongIndex, int bitOffsetInULong, string maskLiteral)
+    private static void EmitBlobOverlayStraddlingGetter(SourceBuilder sb, LoweredLayout layout, BitFieldItem field, int ulongIndex, int bitOffsetInULong, string maskLiteral)
     {
         int bitsInFirstULong  = 64 - bitOffsetInULong;
         int bitsInSecondULong = field.Length - bitsInFirstULong;
         string maskLow        = GetMaskLiteralULong(bitsInFirstULong);
         string maskHigh       = GetMaskLiteralULong(bitsInSecondULong);
 
-        int offset1         = ulongIndex * 8;
-        int offset2         = (ulongIndex + 1) * 8;
+        int offset1 = ulongIndex * 8;
+        int offset2 = (ulongIndex + 1) * 8;
 
         sb.OpenBlock("get");
-        EmitReadUInt64IntoVariable(sb, plan, "_span", offset1, "data0");
-        EmitReadUInt64IntoVariable(sb, plan, "_span", offset2, "data1");
+        EmitReadUInt64IntoVariable(sb, layout, "_span", offset1, "data0");
+        EmitReadUInt64IntoVariable(sb, layout, "_span", offset2, "data1");
         
         if (field.TypeDisplayName == "bool")
         {
@@ -343,19 +343,19 @@ internal static class OverlayEmitter
         sb.CloseBlock();
     }
 
-    private static void EmitBlobOverlayStraddlingSetter(SourceBuilder sb, LoweredLayout plan, BitFieldItem field, int ulongIndex, int bitOffsetInULong, string maskLiteral, string accessor)
+    private static void EmitBlobOverlayStraddlingSetter(SourceBuilder sb, LoweredLayout layout, BitFieldItem field, int ulongIndex, int bitOffsetInULong, string maskLiteral, string accessor)
     {
         int bitsInFirstULong  = 64 - bitOffsetInULong;
         int bitsInSecondULong = field.Length - bitsInFirstULong;
         string maskLow        = GetMaskLiteralULong(bitsInFirstULong);
         string maskHigh       = GetMaskLiteralULong(bitsInSecondULong);
 
-        int offset1         = ulongIndex * 8;
-        int offset2         = (ulongIndex + 1) * 8;
+        int offset1 = ulongIndex * 8;
+        int offset2 = (ulongIndex + 1) * 8;
 
         sb.OpenBlock(accessor);
-        EmitReadUInt64IntoVariable(sb, plan, "_span", offset1, "data0");
-        EmitReadUInt64IntoVariable(sb, plan, "_span", offset2, "data1");
+        EmitReadUInt64IntoVariable(sb, layout, "_span", offset1, "data0");
+        EmitReadUInt64IntoVariable(sb, layout, "_span", offset2, "data1");
         
         if (field.TypeDisplayName == "bool")
         {
@@ -368,8 +368,8 @@ internal static class OverlayEmitter
             sb.Line($"data1 = (data1 & ~({maskHigh})) | ((val >> {bitsInFirstULong}) & {maskHigh});");
         }
         
-        EmitWriteUInt64FromVariable(sb, plan, "_span", offset1, "data0");
-        EmitWriteUInt64FromVariable(sb, plan, "_span", offset2, "data1");
+        EmitWriteUInt64FromVariable(sb, layout, "_span", offset1, "data0");
+        EmitWriteUInt64FromVariable(sb, layout, "_span", offset2, "data1");
         
         sb.CloseBlock();
     }

@@ -8,34 +8,34 @@ namespace Katera.Generator.Emission;
 
 internal static class BlobEmitter
 {
-    internal static void EmitBlobBody(LoweredLayout plan, SourceBuilder sb)
+    internal static void EmitBlobBody(LoweredLayout layout, SourceBuilder sb)
     {
-        int ulongCount = (plan.SizeBytes + 7) / 8;
+        int ulongCount = (layout.SizeBytes + 7) / 8;
         
         for (int i = 0; i < ulongCount; i++)
             sb.Line($"private ulong _data{i};");
         
         sb.Line();
 
-        foreach (var field in plan.Fields)
-            EmitBlobProperty(plan, field, sb);
+        foreach (var field in layout.Fields)
+            EmitBlobProperty(layout, field, sb);
 
         sb.Line();
 
-        string methodAccessibility = GetAccessibility(plan.Accessibility);
+        string methodAccessibility = GetAccessibility(layout.Accessibility);
 
-        EmitFrom(plan, methodAccessibility, ulongCount, sb);
+        EmitFrom(layout, methodAccessibility, ulongCount, sb);
         sb.Line();
-        EmitTryFrom(plan, methodAccessibility, ulongCount, sb);
+        EmitTryFrom(layout, methodAccessibility, ulongCount, sb);
 
         sb.Line();
-        EmitWriteTo(plan, methodAccessibility, ulongCount, sb);
+        EmitWriteTo(layout, methodAccessibility, ulongCount, sb);
     }
 
 
-    private static void EmitBlobProperty(LoweredLayout plan, BitFieldItem field, SourceBuilder sb)
+    private static void EmitBlobProperty(LoweredLayout layout, BitFieldItem field, SourceBuilder sb)
     {
-        int shift            = ComputeShift(plan, field);
+        int shift            = ComputeShift(layout, field);
         string maskLiteral   = GetMaskLiteralULong(field.Length);
         string accessibility = GetAccessibility(field.Accessor.Accessibility);
         string typeName      = field.TypeDisplayName;
@@ -127,32 +127,32 @@ internal static class BlobEmitter
     }
 
 
-    private static void EmitFrom(LoweredLayout plan, string accessibility, int ulongCount, SourceBuilder sb)
+    private static void EmitFrom(LoweredLayout layout, string accessibility, int ulongCount, SourceBuilder sb)
     {
-        sb.OpenBlock($"{accessibility} static {plan.TypeName} From(ReadOnlySpan<byte> span)");
-        sb.Write($"if (span.Length < {plan.SizeBytes})\r\n", indent: true);
+        sb.OpenBlock($"{accessibility} static {layout.TypeName} From(ReadOnlySpan<byte> span)");
+        sb.Write($"if (span.Length < {layout.SizeBytes})\r\n", indent: true);
         sb.Write("    throw new System.ArgumentException(\"Span too small.\", nameof(span));\r\n", indent: true);
         sb.Line();
 
-        sb.OpenBlock($"return new {plan.TypeName}");
-        EmitBlobDataInitializers(plan, ulongCount, sb);
+        sb.OpenBlock($"return new {layout.TypeName}");
+        EmitBlobDataInitializers(layout, ulongCount, sb);
         
         sb.CloseBlock(";");
         sb.CloseBlock();
     }
 
-    private static void EmitTryFrom(LoweredLayout plan, string accessibility, int ulongCount, SourceBuilder sb)
+    private static void EmitTryFrom(LoweredLayout layout, string accessibility, int ulongCount, SourceBuilder sb)
     {
-        sb.OpenBlock($"{accessibility} static bool TryFrom(ReadOnlySpan<byte> span, out {plan.TypeName} value)");
+        sb.OpenBlock($"{accessibility} static bool TryFrom(ReadOnlySpan<byte> span, out {layout.TypeName} value)");
 
-        sb.OpenBlock($"if (span.Length < {plan.SizeBytes})");
+        sb.OpenBlock($"if (span.Length < {layout.SizeBytes})");
         sb.Line("value = default;");
         sb.Line("return false;");
         sb.CloseBlock();
         sb.Line();
 
-        sb.OpenBlock($"value = new {plan.TypeName}");
-        EmitBlobDataInitializers(plan, ulongCount, sb);
+        sb.OpenBlock($"value = new {layout.TypeName}");
+        EmitBlobDataInitializers(layout, ulongCount, sb);
         
         sb.CloseBlock(";");
         sb.Line();
@@ -160,12 +160,12 @@ internal static class BlobEmitter
         sb.CloseBlock();
     }
 
-    private static void EmitBlobDataInitializers(LoweredLayout plan, int ulongCount, SourceBuilder sb)
+    private static void EmitBlobDataInitializers(LoweredLayout layout, int ulongCount, SourceBuilder sb)
     {
         for (int i = 0; i < ulongCount; i++)
         {
             int offset = i * 8;
-            sb.Write($"_data{i} = {BuildReadUInt64Expression(plan, "span", offset)}", indent: true);
+            sb.Write($"_data{i} = {BuildReadUInt64Expression(layout, "span", offset)}", indent: true);
 
             if (i < ulongCount - 1)
                 sb.Write(",\r\n", indent: false);
@@ -175,17 +175,17 @@ internal static class BlobEmitter
     }
 
 
-    private static void EmitWriteTo(LoweredLayout plan, string accessibility, int ulongCount, SourceBuilder sb)
+    private static void EmitWriteTo(LoweredLayout layout, string accessibility, int ulongCount, SourceBuilder sb)
     {
         sb.OpenBlock($"{accessibility} void WriteTo(Span<byte> span)");
-        sb.Write($"if (span.Length < {plan.SizeBytes})\r\n", indent: true);
+        sb.Write($"if (span.Length < {layout.SizeBytes})\r\n", indent: true);
         sb.Write("    throw new System.ArgumentException(\"Span too small.\", nameof(span));\r\n", indent: true);
         sb.Line();
 
         for (int i = 0; i < ulongCount; i++)
         {
             int offset = i * 8;
-            EmitWriteUInt64FromVariable(sb, plan, "span", offset, $"_data{i}");
+            EmitWriteUInt64FromVariable(sb, layout, "span", offset, $"_data{i}");
         }
 
         sb.CloseBlock();
