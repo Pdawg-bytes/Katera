@@ -150,7 +150,7 @@ internal static class OwnedRegisterEmitter
     private static void EmitBoolSetter(SourceBuilder sb, string accessor, string backingType, int shift) =>
         sb.Line(
             $"{accessor} => _value = ({backingType})((_value & ~(({backingType})1 << {shift})) | " +
-            $"(value ? (({backingType})1 << {shift}) : ({backingType})0));");
+            $"((({backingType})global::System.Runtime.CompilerServices.Unsafe.BitCast<bool, byte>(value) & ({backingType})1) << {shift}));");
 
     private static void EmitFastPathSetter(SourceBuilder sb, BitFieldItem field, string accessor, string backingType, int shift, int totalBits)
     {

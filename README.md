@@ -133,7 +133,7 @@ public partial struct EnumLayout
 }
 ```
 
-`bool` fields are stored as a single bit and will not allow larger sizes.
+`bool` fields are stored as a single bit and will not allow larger sizes. Because of this, a `bool` written to a bitfield is truncated to its lowest bit, the same way multi-bit fields are masked to their width. The CLR spec allows any nonzero `bool` to be treated as `true`, but bitfield setters don't test for nonzero. Instead, they store bit 0 of the value's underlying byte. Bools produced by normal C# code are always 0 or 1, so this only matters for a malformed `bool` (for example one created through `Unsafe` or `MemoryMarshal`), and in that case only the field's own bit is affected. Neighboring fields are never modified.
 
 ## Signed fields
 Signed integral fields are masked to the declared bit width and sign-extended on read. In practice, that means a signed field behaves like a fixed-width two's-complement value inside the declared bit range.
