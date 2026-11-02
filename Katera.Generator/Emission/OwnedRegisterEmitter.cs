@@ -135,13 +135,13 @@ internal static class OwnedRegisterEmitter
         var (littleIndex, bigIndex) = ComputeFastPathIndices(shift, field.Length, totalBits);
 
         sb.OpenBlock("get");
-        sb.Line($"Span<{backingType}> s = MemoryMarshal.CreateSpan(ref _value, 1);");
-        sb.Line($"ref {typeName} p = ref Unsafe.As<{backingType}, {typeName}>(ref MemoryMarshal.GetReference(s));");
+        sb.Line($"global::System.Span<{backingType}> s = global::System.Runtime.InteropServices.MemoryMarshal.CreateSpan(ref _value, 1);");
+        sb.Line($"ref {typeName} p = ref global::System.Runtime.CompilerServices.Unsafe.As<{backingType}, {typeName}>(ref global::System.Runtime.InteropServices.MemoryMarshal.GetReference(s));");
 
         if (littleIndex == bigIndex)
-            sb.Line($"return Unsafe.Add(ref p, {littleIndex});");
+            sb.Line($"return global::System.Runtime.CompilerServices.Unsafe.Add(ref p, {littleIndex});");
         else
-            sb.Line($"return Unsafe.Add(ref p, BitConverter.IsLittleEndian ? {littleIndex} : {bigIndex});");
+            sb.Line($"return global::System.Runtime.CompilerServices.Unsafe.Add(ref p, global::System.BitConverter.IsLittleEndian ? {littleIndex} : {bigIndex});");
 
         sb.CloseBlock();
     }
@@ -158,13 +158,13 @@ internal static class OwnedRegisterEmitter
         var (littleIndex, bigIndex) = ComputeFastPathIndices(shift, field.Length, totalBits);
 
         sb.OpenBlock(accessor);
-        sb.Line($"Span<{backingType}> s = MemoryMarshal.CreateSpan(ref _value, 1);");
-        sb.Line($"ref {typeName} p = ref Unsafe.As<{backingType}, {typeName}>(ref MemoryMarshal.GetReference(s));");
+        sb.Line($"global::System.Span<{backingType}> s = global::System.Runtime.InteropServices.MemoryMarshal.CreateSpan(ref _value, 1);");
+        sb.Line($"ref {typeName} p = ref global::System.Runtime.CompilerServices.Unsafe.As<{backingType}, {typeName}>(ref global::System.Runtime.InteropServices.MemoryMarshal.GetReference(s));");
 
         if (littleIndex == bigIndex)
-            sb.Line($"Unsafe.Add(ref p, {littleIndex}) = value;");
+            sb.Line($"global::System.Runtime.CompilerServices.Unsafe.Add(ref p, {littleIndex}) = value;");
         else
-            sb.Line($"Unsafe.Add(ref p, BitConverter.IsLittleEndian ? {littleIndex} : {bigIndex}) = value;");
+            sb.Line($"global::System.Runtime.CompilerServices.Unsafe.Add(ref p, global::System.BitConverter.IsLittleEndian ? {littleIndex} : {bigIndex}) = value;");
 
         sb.CloseBlock();
     }
@@ -201,10 +201,10 @@ internal static class OwnedRegisterEmitter
 
     private static void EmitFrom(LoweredLayout layout, string accessibility, SourceBuilder sb)
     {
-        sb.OpenBlock($"{accessibility} static {layout.TypeName} From(ReadOnlySpan<byte> span)");
+        sb.OpenBlock($"{accessibility} static {layout.TypeName} From(global::System.ReadOnlySpan<byte> span)");
 
         sb.Write($"if (span.Length < {layout.SizeBytes})\r\n", indent: true);
-        sb.Write("    throw new System.ArgumentException(\"Span too small.\", nameof(span));\r\n", indent: true);
+        sb.Write("    throw new global::System.ArgumentException(\"Span too small.\", nameof(span));\r\n", indent: true);
         sb.Line();
 
         sb.OpenBlock($"return new {layout.TypeName}");
@@ -216,7 +216,7 @@ internal static class OwnedRegisterEmitter
 
     private static void EmitTryFrom(LoweredLayout layout, string accessibility, SourceBuilder sb)
     {
-        sb.OpenBlock($"{accessibility} static bool TryFrom(ReadOnlySpan<byte> span, out {layout.TypeName} value)");
+        sb.OpenBlock($"{accessibility} static bool TryFrom(global::System.ReadOnlySpan<byte> span, out {layout.TypeName} value)");
 
         sb.OpenBlock($"if (span.Length < {layout.SizeBytes})");
         sb.Line("value = default;");
@@ -240,7 +240,7 @@ internal static class OwnedRegisterEmitter
         if (layout.Numeric == NumericKind.Byte)
             sb.Write($"_value = span[0]", indent: true);
         else
-            sb.Write($"_value = BinaryPrimitives.Read{backingType}{BitOrderToEndianness(layout.BitOrder)}(span)", indent: true);
+            sb.Write($"_value = global::System.Buffers.Binary.BinaryPrimitives.Read{backingType}{BitOrderToEndianness(layout.BitOrder)}(span)", indent: true);
 
         sb.Line();
     }
@@ -249,16 +249,16 @@ internal static class OwnedRegisterEmitter
     {
         int numericBits = (int)layout.Numeric!;
 
-        sb.OpenBlock($"{accessibility} void WriteTo(Span<byte> span)");
+        sb.OpenBlock($"{accessibility} void WriteTo(global::System.Span<byte> span)");
 
         sb.Write($"if (span.Length < {layout.SizeBytes})\r\n", indent: true);
-        sb.Write("    throw new System.ArgumentException(\"Span too small.\", nameof(span));\r\n", indent: true);
+        sb.Write("    throw new global::System.ArgumentException(\"Span too small.\", nameof(span));\r\n", indent: true);
         sb.Line();
 
         if (layout.Numeric == NumericKind.Byte)
             sb.Line("span[0] = _value;");
         else
-            sb.Line($"BinaryPrimitives.WriteUInt{numericBits}{BitOrderToEndianness(layout.BitOrder)}(span, _value);");
+            sb.Line($"global::System.Buffers.Binary.BinaryPrimitives.WriteUInt{numericBits}{BitOrderToEndianness(layout.BitOrder)}(span, _value);");
 
         sb.CloseBlock();
     }

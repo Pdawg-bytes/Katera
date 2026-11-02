@@ -14,9 +14,9 @@ internal static class OverlayEmitter
         string overlayName   = $"{layout.TypeName}View";
         string accessibility = GetAccessibility(layout.Accessibility);
 
-        sb.OpenBlock($"{accessibility} ref struct {overlayName}(Span<byte> span)");
+        sb.OpenBlock($"{accessibility} ref struct {overlayName}(global::System.Span<byte> span)");
 
-        sb.Line("private Span<byte> _span = span;");
+        sb.Line("private global::System.Span<byte> _span = span;");
         sb.Line();
 
         foreach (var field in layout.Fields)
@@ -24,7 +24,7 @@ internal static class OverlayEmitter
 
         sb.Line();
         EmitOverMethods(layout, overlayName, accessibility, sb);
-        sb.Line($"{accessibility} readonly Span<byte> AsSpan() => _span;");
+        sb.Line($"{accessibility} readonly global::System.Span<byte> AsSpan() => _span;");
 
         sb.CloseBlock();
     }
@@ -101,12 +101,12 @@ internal static class OverlayEmitter
             return;
         }
 
-        sb.Line($"{numericType} {varName} = Unsafe.ReadUnaligned<{numericType}>(ref MemoryMarshal.GetReference(_span));");
+        sb.Line($"{numericType} {varName} = global::System.Runtime.CompilerServices.Unsafe.ReadUnaligned<{numericType}>(ref global::System.Runtime.InteropServices.MemoryMarshal.GetReference(_span));");
 
         if (layout.BitOrder == BitOrder.MSBFirst)
-            sb.Line($"if (BitConverter.IsLittleEndian) {varName} = BinaryPrimitives.ReverseEndianness({varName});");
+            sb.Line($"if (global::System.BitConverter.IsLittleEndian) {varName} = global::System.Buffers.Binary.BinaryPrimitives.ReverseEndianness({varName});");
         else
-            sb.Line($"if (!BitConverter.IsLittleEndian) {varName} = BinaryPrimitives.ReverseEndianness({varName});");
+            sb.Line($"if (!global::System.BitConverter.IsLittleEndian) {varName} = global::System.Buffers.Binary.BinaryPrimitives.ReverseEndianness({varName});");
     }
 
     private static void EmitOverlayBoolGetter(SourceBuilder sb, LoweredLayout layout, int shift)
@@ -164,11 +164,11 @@ internal static class OverlayEmitter
         }
 
         if (layout.BitOrder == BitOrder.MSBFirst)
-            sb.Line($"if (BitConverter.IsLittleEndian) {varName} = BinaryPrimitives.ReverseEndianness({varName});");
+            sb.Line($"if (global::System.BitConverter.IsLittleEndian) {varName} = global::System.Buffers.Binary.BinaryPrimitives.ReverseEndianness({varName});");
         else
-            sb.Line($"if (!BitConverter.IsLittleEndian) {varName} = BinaryPrimitives.ReverseEndianness({varName});");
+            sb.Line($"if (!global::System.BitConverter.IsLittleEndian) {varName} = global::System.Buffers.Binary.BinaryPrimitives.ReverseEndianness({varName});");
 
-        sb.Line($"Unsafe.WriteUnaligned(ref MemoryMarshal.GetReference(_span), {varName});");
+        sb.Line($"global::System.Runtime.CompilerServices.Unsafe.WriteUnaligned(ref global::System.Runtime.InteropServices.MemoryMarshal.GetReference(_span), {varName});");
     }
 
     private static void EmitOverlayBoolSetter(SourceBuilder sb, LoweredLayout layout, int shift, string accessor)
@@ -213,16 +213,16 @@ internal static class OverlayEmitter
 
     private static void EmitOverMethods(LoweredLayout layout, string overlayName, string accessibility, SourceBuilder sb)
     {
-        sb.OpenBlock($"{accessibility} static {overlayName} Over(Span<byte> span)");
+        sb.OpenBlock($"{accessibility} static {overlayName} Over(global::System.Span<byte> span)");
         sb.Line($"if (span.Length < {layout.SizeBytes})");
-        sb.Write("    throw new System.ArgumentException(\"Span too small.\", nameof(span));\r\n", indent: true);
+        sb.Write("    throw new global::System.ArgumentException(\"Span too small.\", nameof(span));\r\n", indent: true);
         sb.Line();
         sb.Line($"return new {overlayName}(span.Slice(0, {layout.SizeBytes}));");
         sb.CloseBlock();
         sb.Line();
 
         sb.OpenBlock($"{accessibility} static {overlayName} Over(ref byte reference)");
-        sb.Line($"Span<byte> span = MemoryMarshal.CreateSpan(ref reference, {layout.SizeBytes});");
+        sb.Line($"global::System.Span<byte> span = global::System.Runtime.InteropServices.MemoryMarshal.CreateSpan(ref reference, {layout.SizeBytes});");
         sb.Line($"return new {overlayName}(span);");
         sb.CloseBlock();
         sb.Line();

@@ -70,7 +70,7 @@ internal static class Common
         int remainingBytes = layout.SizeBytes - offset;
 
         if (remainingBytes >= 8)
-            return $"BinaryPrimitives.ReadUInt64{BitOrderToEndianness(layout.BitOrder)}({spanExpr}.Slice({offset}))";
+            return $"global::System.Buffers.Binary.BinaryPrimitives.ReadUInt64{BitOrderToEndianness(layout.BitOrder)}({spanExpr}.Slice({offset}))";
 
         var expression = new StringBuilder();
 
@@ -97,7 +97,7 @@ internal static class Common
 
         if (remainingBytes >= 8)
         {
-            sb.Line($"BinaryPrimitives.WriteUInt64{BitOrderToEndianness(layout.BitOrder)}({spanExpr}.Slice({offset}), {valueExpr});");
+            sb.Line($"global::System.Buffers.Binary.BinaryPrimitives.WriteUInt64{BitOrderToEndianness(layout.BitOrder)}({spanExpr}.Slice({offset}), {valueExpr});");
             return;
         }
 

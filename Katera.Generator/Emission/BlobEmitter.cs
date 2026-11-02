@@ -129,9 +129,9 @@ internal static class BlobEmitter
 
     private static void EmitFrom(LoweredLayout layout, string accessibility, int ulongCount, SourceBuilder sb)
     {
-        sb.OpenBlock($"{accessibility} static {layout.TypeName} From(ReadOnlySpan<byte> span)");
+        sb.OpenBlock($"{accessibility} static {layout.TypeName} From(global::System.ReadOnlySpan<byte> span)");
         sb.Write($"if (span.Length < {layout.SizeBytes})\r\n", indent: true);
-        sb.Write("    throw new System.ArgumentException(\"Span too small.\", nameof(span));\r\n", indent: true);
+        sb.Write("    throw new global::System.ArgumentException(\"Span too small.\", nameof(span));\r\n", indent: true);
         sb.Line();
 
         sb.OpenBlock($"return new {layout.TypeName}");
@@ -143,7 +143,7 @@ internal static class BlobEmitter
 
     private static void EmitTryFrom(LoweredLayout layout, string accessibility, int ulongCount, SourceBuilder sb)
     {
-        sb.OpenBlock($"{accessibility} static bool TryFrom(ReadOnlySpan<byte> span, out {layout.TypeName} value)");
+        sb.OpenBlock($"{accessibility} static bool TryFrom(global::System.ReadOnlySpan<byte> span, out {layout.TypeName} value)");
 
         sb.OpenBlock($"if (span.Length < {layout.SizeBytes})");
         sb.Line("value = default;");
@@ -177,9 +177,9 @@ internal static class BlobEmitter
 
     private static void EmitWriteTo(LoweredLayout layout, string accessibility, int ulongCount, SourceBuilder sb)
     {
-        sb.OpenBlock($"{accessibility} void WriteTo(Span<byte> span)");
+        sb.OpenBlock($"{accessibility} void WriteTo(global::System.Span<byte> span)");
         sb.Write($"if (span.Length < {layout.SizeBytes})\r\n", indent: true);
-        sb.Write("    throw new System.ArgumentException(\"Span too small.\", nameof(span));\r\n", indent: true);
+        sb.Write("    throw new global::System.ArgumentException(\"Span too small.\", nameof(span));\r\n", indent: true);
         sb.Line();
 
         for (int i = 0; i < ulongCount; i++)
